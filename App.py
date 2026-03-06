@@ -46,7 +46,6 @@ st.markdown("""
 # --- CONFIGURACIÓN DE ARCHIVOS Y CARPETAS ---
 DATA_FILE = "contabilidad_casa.csv"
 USERS_FILE = "usuarios.csv"
-LOG_FILE = "log_modificaciones.csv"
 TRANSFERS_FILE = "transferencias.csv"
 DIR_COMPROBANTES = "comprobantes"
 
@@ -222,7 +221,7 @@ else:
                 st.rerun()
 
     # =========================================================
-    # VISTA 3: PANTALLA DE EDICIÓN DE GASTOS (OVERLAY PANTALLA COMPLETA)
+    # VISTA 3: PANTALLA DE EDICIÓN DE GASTOS (OVERLAY)
     # =========================================================
     elif st.session_state.gasto_a_editar is not None:
         id_seleccionado = st.session_state.gasto_a_editar
@@ -329,9 +328,16 @@ else:
 
                 st.markdown("---")
                 
-                # Gráfico de Evolución Apilado por Categoría
+                # Gráfico de Evolución Apilado por Categoría (ARRASTRANDO VALORES)
                 st.markdown("#### 📈 Evolución del gasto por tipo")
-                gastos_evolucion = df_dash.groupby(["Fecha", "Categoria"])["Monto_UYU"].sum().reset_index()
+                
+                fechas_unicas = df_dash["Fecha"].dropna().unique()
+                categorias_unicas = df_dash["Categoria"].dropna().unique()
+                grid = pd.MultiIndex.from_product([fechas_unicas, categorias_unicas], names=["Fecha", "Categoria"]).to_frame(index=False)
+                
+                gastos_diarios = df_dash.groupby(["Fecha", "Categoria"])["Monto_UYU"].sum().reset_index()
+                gastos_evolucion = pd.merge(grid, gastos_diarios, on=["Fecha", "Categoria"], how="left").fillna(0)
+                
                 gastos_evolucion = gastos_evolucion.sort_values("Fecha")
                 gastos_evolucion["Gasto_Acumulado"] = gastos_evolucion.groupby("Categoria")["Monto_UYU"].cumsum()
                 
@@ -341,7 +347,7 @@ else:
             else:
                 st.info("Sin registros aún.")
 
-        # --- PESTAÑA 2: HISTORIAL ---
+        # --- PESTAÑA 2: HISTORIAL (SOLO VISTA) ---
         with tabs[1]:
             subtab1, subtab2 = st.tabs(["🛒 Gastos", "💸 Transferencias"])
             with subtab1:
@@ -394,6 +400,13 @@ else:
         if es_admin:
             with tabs[3]:
                 st.dataframe(usuarios_df[["Usuario"]], use_container_width=True)
-                if st.button("Añadir Usuario de Prueba"): 
-                    save_data(pd.concat([usuarios_df, pd.DataFrame([{"Usuario": f"Socio_{len(usuarios_df)}", "Clave": "123"}])], ignore_index=True), USERS_FILE)
-                    st.rerun()
+                st.markdown("#### Registrar Socio")
+                with st.form("nuevo_socio_form"):
+                    nuevo_nombre = st.text_input("Nombre de Usuario")
+                    nueva_clave = st.text_input("Contraseña", type="password")
+                    if st.form_submit_button("Añadir Usuario", type="primary"): 
+                        if nuevo_nombre and nueva_clave:
+                            if nuevo_nombre in usuarios_df["Usuario"].values: st.error("Ese usuario ya existe.")
+                            else:
+                                save_data(pd.concat([usuarios_df, pd.DataFrame([{"Usuario": nuevo_nombre, "Clave": nueva_clave}])], ignore_index=True), USERS_FILE)
+                                st.rerun()
