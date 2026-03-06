@@ -417,7 +417,7 @@ else:
     elif menu == "Historial":
         
         # Flujo 1: No estamos editando nada, mostramos las listas
-        if st.session_state.gasto_a_editar is None y st.session_state.transfer_a_editar is None:
+        if st.session_state.gasto_a_editar is None and st.session_state.transfer_a_editar is None:
             st.markdown("### Libro Mayor")
             
             # Pestañas nativas de Streamlit para separar Gastos de Transferencias
