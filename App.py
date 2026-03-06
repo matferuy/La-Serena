@@ -4,28 +4,29 @@ import os
 import datetime
 import plotly.express as px
 import requests
+import uuid
 
 # --- CONFIGURACIÓN DE ARCHIVOS Y CARPETAS ---
 DATA_FILE = "contabilidad_casa.csv"
 USERS_FILE = "usuarios.csv"
+LOG_FILE = "log_modificaciones.csv"
 DIR_COMPROBANTES = "comprobantes"
 
 if not os.path.exists(DIR_COMPROBANTES):
     os.makedirs(DIR_COMPROBANTES)
 
-# --- NUEVA FUNCIÓN: OBTENER TIPO DE CAMBIO AUTOMÁTICO ---
-@st.cache_data(ttl=3600) # Se actualiza cada 1 hora para no saturar la red
+# --- FUNCIÓN: OBTENER TIPO DE CAMBIO AUTOMÁTICO ---
+@st.cache_data(ttl=3600)
 def obtener_tasa_usd_uyu():
     try:
-        # Usamos una API gratuita que consolida tipos de cambio diarios
         url = "https://open.er-api.com/v6/latest/USD"
         response = requests.get(url, timeout=5)
         data = response.json()
         return round(data["rates"]["UYU"], 2)
     except:
-        return 39.00 # Valor de respaldo en caso de que la API falle
+        return 39.00
 
-# --- FUNCIONES DE DATOS ---
+# --- FUNCIONES DE DATOS Y LOGS ---
 def load_users():
     if os.path.exists(USERS_FILE):
         return pd.read_csv(USERS_FILE, dtype={"Usuario": str, "Clave": str})
@@ -36,12 +37,34 @@ def load_users():
 
 def load_data():
     if os.path.exists(DATA_FILE):
-        return pd.read_csv(DATA_FILE)
+        df = pd.read_csv(DATA_FILE)
+        # Retrocompatibilidad: Si el archivo viejo no tiene ID, se los creamos
+        if "ID" not in df.columns:
+            df["ID"] = [uuid.uuid4().hex for _ in range(len(df))]
+            save_data(df, DATA_FILE)
+        return df
     else:
         return pd.DataFrame(columns=[
-            "Fecha", "Concepto", "Moneda", "Monto_Original", "Tasa_Cambio", 
+            "ID", "Fecha", "Concepto", "Moneda", "Monto_Original", "Tasa_Cambio", 
             "Monto_UYU", "Pagado_por", "Categoria", "Archivo_Adjunto"
         ])
+
+def load_logs():
+    if os.path.exists(LOG_FILE):
+        return pd.read_csv(LOG_FILE)
+    else:
+        return pd.DataFrame(columns=["Timestamp", "ID_Gasto", "Usuario", "Detalle_Cambios"])
+
+def registrar_log(id_gasto, usuario, detalle):
+    logs_df = load_logs()
+    nuevo_log = pd.DataFrame([{
+        "Timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "ID_Gasto": id_gasto,
+        "Usuario": usuario,
+        "Detalle_Cambios": detalle
+    }])
+    logs_df = pd.concat([logs_df, nuevo_log], ignore_index=True)
+    logs_df.to_csv(LOG_FILE, index=False)
 
 def save_data(df, file_name):
     df.to_csv(file_name, index=False)
@@ -86,6 +109,7 @@ else:
     st.sidebar.markdown("---")
     menu = st.sidebar.selectbox("Navegación", [
         "Registrar Gasto", 
+        "Mis Gastos (Editar)",
         "Balance General", 
         "Monitoreo de Gastos", 
         "Gestionar Usuarios"
@@ -93,12 +117,10 @@ else:
 
     df_gastos = load_data()
 
-    # --- MÓDULO 1: REGISTRAR GASTO (AHORA DINÁMICO) ---
+    # --- MÓDULO 1: REGISTRAR GASTO ---
     if menu == "Registrar Gasto":
         st.header("📝 Nuevo Registro de Gasto")
-        st.write("Completa los datos. El formulario se actualizará automáticamente según la moneda.")
         
-        # Eliminamos el st.form para permitir cálculos en tiempo real
         fecha = st.date_input("Fecha", datetime.date.today())
         concepto = st.text_input("Concepto (Ej. Pago arquitecto, Cemento)")
         
@@ -110,7 +132,7 @@ else:
         if moneda == "USD":
             tasa_sugerida = obtener_tasa_usd_uyu()
             st.info("🌐 Tipo de cambio interbancario referencial obtenido automáticamente.")
-            tasa_cambio = st.number_input("Tasa de cambio a aplicar (Puedes ajustarla manualmente)", min_value=1.0, value=float(tasa_sugerida), format="%.2f")
+            tasa_cambio = st.number_input("Tasa de cambio a aplicar", min_value=1.0, value=float(tasa_sugerida), format="%.2f")
         
         lista_usuarios = usuarios_df["Usuario"].tolist()
         indice_usuario = lista_usuarios.index(st.session_state.usuario_actual) if st.session_state.usuario_actual in lista_usuarios else 0
@@ -118,9 +140,8 @@ else:
         
         categoria = st.selectbox("Categoría", ["Materiales", "Mano de Obra", "Trámites/Permisos", "Terreno", "Otros"])
         
-        archivo_adjunto = st.file_uploader("Adjuntar Boleta/Factura (Opcional)", type=["pdf", "png", "jpg", "jpeg"])
+        archivo_adjunto = st.file_uploader("Adjuntar Boleta/Factura (Opcional - Puedes subirlo después)", type=["pdf", "png", "jpg", "jpeg"])
         
-        # Botón de guardado
         if st.button("Guardar Gasto", type="primary"):
             if monto <= 0:
                 st.error("El monto debe ser mayor a 0.")
@@ -134,7 +155,9 @@ else:
                     with open(ruta_guardado, "wb") as f:
                         f.write(archivo_adjunto.getbuffer())
                 
+                id_unico = uuid.uuid4().hex
                 nuevo_dato = pd.DataFrame([{
+                    "ID": id_unico,
                     "Fecha": fecha, 
                     "Concepto": concepto, 
                     "Moneda": moneda, 
@@ -148,16 +171,105 @@ else:
                 
                 df_gastos = pd.concat([df_gastos, nuevo_dato], ignore_index=True)
                 save_data(df_gastos, DATA_FILE)
-                st.success(f"¡Gasto registrado con éxito! Equivalente a sumar: **${monto_uyu:,.2f} UYU**")
+                st.success(f"¡Gasto registrado con éxito! Equivalente: **${monto_uyu:,.2f} UYU**")
 
-    # --- MÓDULO 2: BALANCE 50/50 (ARREGLADO PARA 1 SOLO GASTO) ---
+    # --- MÓDULO NUEVO: MIS GASTOS (EDITAR Y SUBIR DOCS) ---
+    elif menu == "Mis Gastos (Editar)":
+        st.header("✏️ Modificar mis registros")
+        st.write("Solo puedes editar los gastos que tú hayas registrado/pagado.")
+        
+        # Filtramos solo los gastos del usuario actual
+        mis_gastos = df_gastos[df_gastos["Pagado_por"] == st.session_state.usuario_actual]
+        
+        if not mis_gastos.empty:
+            # Crear un formato amigable para el menú desplegable
+            opciones_nombres = mis_gastos.apply(lambda row: f"{row['Fecha']} - {row['Concepto']} ({row['Moneda']} {row['Monto_Original']})", axis=1).tolist()
+            opciones_ids = mis_gastos["ID"].tolist()
+            
+            seleccion = st.selectbox("Selecciona el gasto que deseas modificar:", range(len(opciones_ids)), format_func=lambda x: opciones_nombres[x])
+            id_seleccionado = opciones_ids[seleccion]
+            
+            # Extraer la fila actual
+            fila_actual = mis_gastos[mis_gastos["ID"] == id_seleccionado].iloc[0]
+            
+            st.markdown("---")
+            st.subheader("Datos del Gasto")
+            
+            # Formulario de edición
+            with st.form("form_edicion"):
+                # Convertir la fecha de string a objeto datetime para el input
+                fecha_obj = datetime.datetime.strptime(str(fila_actual["Fecha"]), "%Y-%m-%d").date() if isinstance(fila_actual["Fecha"], str) else fila_actual["Fecha"]
+                
+                edit_fecha = st.date_input("Fecha", fecha_obj)
+                edit_concepto = st.text_input("Concepto", fila_actual["Concepto"])
+                
+                col1, col2 = st.columns(2)
+                idx_moneda = ["UYU", "USD"].index(fila_actual["Moneda"]) if fila_actual["Moneda"] in ["UYU", "USD"] else 0
+                edit_moneda = col1.selectbox("Moneda", ["UYU", "USD"], index=idx_moneda)
+                edit_monto = col2.number_input("Monto", min_value=0.0, value=float(fila_actual["Monto_Original"]), format="%.2f")
+                
+                edit_tasa = 1.0
+                if edit_moneda == "USD":
+                    edit_tasa = st.number_input("Tasa de cambio aplicada", min_value=1.0, value=float(fila_actual["Tasa_Cambio"]), format="%.2f")
+                
+                categorias = ["Materiales", "Mano de Obra", "Trámites/Permisos", "Terreno", "Otros"]
+                idx_cat = categorias.index(fila_actual["Categoria"]) if fila_actual["Categoria"] in categorias else 0
+                edit_categoria = st.selectbox("Categoría", categorias, index=idx_cat)
+                
+                st.write(f"📁 Documento actual: **{fila_actual['Archivo_Adjunto']}**")
+                nuevo_archivo = st.file_uploader("Subir documento nuevo (Reemplaza al anterior)", type=["pdf", "png", "jpg", "jpeg"])
+                
+                guardar_cambios = st.form_submit_button("Guardar Modificaciones")
+                
+                if guardar_cambios:
+                    # Rastrear qué cambió exactamente
+                    cambios_log = []
+                    
+                    if str(edit_fecha) != str(fila_actual["Fecha"]): cambios_log.append(f"Fecha ({fila_actual['Fecha']} -> {edit_fecha})")
+                    if edit_concepto != fila_actual["Concepto"]: cambios_log.append(f"Concepto ('{fila_actual['Concepto']}' -> '{edit_concepto}')")
+                    if edit_moneda != fila_actual["Moneda"]: cambios_log.append(f"Moneda ({fila_actual['Moneda']} -> {edit_moneda})")
+                    if edit_monto != fila_actual["Monto_Original"]: cambios_log.append(f"Monto ({fila_actual['Monto_Original']} -> {edit_monto})")
+                    if edit_categoria != fila_actual["Categoria"]: cambios_log.append(f"Categoría ({fila_actual['Categoria']} -> {edit_categoria})")
+                    
+                    nombre_archivo_final = fila_actual["Archivo_Adjunto"]
+                    if nuevo_archivo is not None:
+                        nombre_archivo_final = f"{edit_fecha}_{nuevo_archivo.name}"
+                        ruta_guardado = os.path.join(DIR_COMPROBANTES, nombre_archivo_final)
+                        with open(ruta_guardado, "wb") as f:
+                            f.write(nuevo_archivo.getbuffer())
+                        cambios_log.append(f"Archivo adjuntado ({nuevo_archivo.name})")
+
+                    if cambios_log:
+                        # Recalcular monto UYU final
+                        nuevo_monto_uyu = edit_monto * edit_tasa
+                        
+                        # Actualizar DataFrame general
+                        idx_general = df_gastos[df_gastos["ID"] == id_seleccionado].index[0]
+                        df_gastos.at[idx_general, "Fecha"] = edit_fecha
+                        df_gastos.at[idx_general, "Concepto"] = edit_concepto
+                        df_gastos.at[idx_general, "Moneda"] = edit_moneda
+                        df_gastos.at[idx_general, "Monto_Original"] = edit_monto
+                        df_gastos.at[idx_general, "Tasa_Cambio"] = edit_tasa
+                        df_gastos.at[idx_general, "Monto_UYU"] = nuevo_monto_uyu
+                        df_gastos.at[idx_general, "Categoria"] = edit_categoria
+                        df_gastos.at[idx_general, "Archivo_Adjunto"] = nombre_archivo_final
+                        
+                        save_data(df_gastos, DATA_FILE)
+                        registrar_log(id_seleccionado, st.session_state.usuario_actual, " | ".join(cambios_log))
+                        
+                        st.success("¡Modificaciones guardadas y registradas en el historial con éxito!")
+                        st.rerun()
+                    else:
+                        st.info("No detecté ninguna modificación para guardar.")
+                        
+        else:
+            st.info("Aún no tienes gastos registrados a tu nombre.")
+
+    # --- MÓDULO 2: BALANCE 50/50 ---
     elif menu == "Balance General":
         st.header("⚖️ Balance de Cuentas (Base UYU)")
         
-        # Filtramos al "admin" por defecto para que solo calcule entre los socios reales
         usuarios_socios = [u for u in usuarios_df["Usuario"].tolist() if u != "admin"]
-        
-        # Si aún no han creado sus usuarios, usamos los que estén (incluido admin)
         if len(usuarios_socios) < 2:
             usuarios_socios = usuarios_df["Usuario"].tolist()
 
@@ -165,13 +277,8 @@ else:
             usuario_1 = usuarios_socios[0]
             usuario_2 = usuarios_socios[1]
             
-            # Buscamos cuánto gastó cada uno. Si el excel está vacío, da 0.
-            if not df_gastos.empty:
-                total_1 = df_gastos[df_gastos["Pagado_por"] == usuario_1]["Monto_UYU"].sum()
-                total_2 = df_gastos[df_gastos["Pagado_por"] == usuario_2]["Monto_UYU"].sum()
-            else:
-                total_1 = 0.0
-                total_2 = 0.0
+            total_1 = df_gastos[df_gastos["Pagado_por"] == usuario_1]["Monto_UYU"].sum() if not df_gastos.empty else 0.0
+            total_2 = df_gastos[df_gastos["Pagado_por"] == usuario_2]["Monto_UYU"].sum() if not df_gastos.empty else 0.0
                 
             st.subheader("Resumen de Aportes")
             col1, col2 = st.columns(2)
@@ -193,9 +300,10 @@ else:
             if not df_gastos.empty:
                 st.markdown("---")
                 st.write("📄 Detalle histórico de gastos:")
-                st.dataframe(df_gastos, use_container_width=True)
+                # Ocultamos la columna ID para que la tabla sea más limpia a la vista
+                st.dataframe(df_gastos.drop(columns=["ID"], errors="ignore"), use_container_width=True)
         else:
-            st.warning("⚠️ Para ver el cálculo 50/50, ve a 'Gestionar Usuarios' y crea al menos 2 cuentas (la tuya y la de tu hermano).")
+            st.warning("⚠️ Ve a 'Gestionar Usuarios' y crea al menos 2 cuentas.")
 
     # --- MÓDULO 3: MONITOREO DE GASTOS ---
     elif menu == "Monitoreo de Gastos":
