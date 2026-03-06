@@ -6,26 +6,112 @@ import plotly.express as px
 import requests
 import uuid
 
-# --- CONFIGURACIÓN INICIAL Y UI DE "APP NATIVA" ---
+# --- CONFIGURACIÓN INICIAL ---
 st.set_page_config(page_title="Casa La Serena", page_icon="🏡", layout="wide", initial_sidebar_state="collapsed")
 
+# --- MAGIA CSS: DISEÑO UI/UX MODERNO ---
 st.markdown("""
     <style>
-    /* Ocultar menú por defecto y footer para ganar espacio en celular */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+    
+    html, body, [class*="css"] {
+        font-family: 'Inter', sans-serif;
+    }
+    
+    /* Ocultar elementos de desarrollador de Streamlit */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
-    /* Reducir el margen superior blanco */
+    
     .block-container {
-        padding-top: 2rem;
-        padding-bottom: 2rem;
+        padding-top: 1rem;
+        max-width: 800px; /* Ancho máximo para que parezca app móvil incluso en PC */
     }
-    /* Estilizar las pestañas superiores para que parezcan botones de app */
+
+    /* Estilo del Tab Bar (Menú Superior) */
+    div.stRadio > div[role="radiogroup"] {
+        background-color: #F3F4F6;
+        padding: 5px;
+        border-radius: 12px;
+        display: flex;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 5px;
+    }
     div.stRadio > div[role="radiogroup"] > label {
-        background-color: #f0f2f6;
-        padding: 5px 10px;
+        background-color: transparent;
+        padding: 8px 12px;
         border-radius: 8px;
-        margin-right: 5px;
+        flex: 1;
+        text-align: center;
+        transition: all 0.2s ease;
+    }
+    div.stRadio > div[role="radiogroup"] > label[data-checked="true"] {
+        background-color: #FFFFFF;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        color: #2563EB !important;
+        font-weight: 600;
+    }
+
+    /* Estilo de Botones */
+    .stButton>button {
+        border-radius: 10px;
+        font-weight: 600;
+        height: 3rem;
+        transition: all 0.3s ease;
+    }
+    .stButton>button[kind="primary"] {
+        background: linear-gradient(135deg, #2563EB, #1D4ED8);
+        border: none;
+        box-shadow: 0 4px 6px rgba(37, 99, 235, 0.2);
+    }
+    .stButton>button[kind="primary"]:hover {
+        box-shadow: 0 6px 8px rgba(37, 99, 235, 0.3);
+        transform: translateY(-1px);
+    }
+
+    /* Tarjetas del Historial (Expanders) */
+    div[data-testid="stExpander"] {
+        background-color: #FFFFFF;
+        border-radius: 12px;
+        border: 1px solid #E5E7EB;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        margin-bottom: 10px;
+    }
+    
+    /* Tarjetas Custom para KPIs (HTML inyectado) */
+    .kpi-card-blue {
+        background: linear-gradient(135deg, #1E3A8A, #3B82F6);
+        color: white;
+        padding: 20px;
+        border-radius: 16px;
+        box-shadow: 0 4px 10px rgba(59, 130, 246, 0.3);
+        margin-bottom: 15px;
+    }
+    .kpi-card-green {
+        background: linear-gradient(135deg, #064E3B, #10B981);
+        color: white;
+        padding: 20px;
+        border-radius: 16px;
+        box-shadow: 0 4px 10px rgba(16, 185, 129, 0.3);
+        margin-bottom: 15px;
+    }
+    .kpi-card-white {
+        background: #FFFFFF;
+        color: #1F2937;
+        padding: 15px;
+        border-radius: 16px;
+        border: 1px solid #E5E7EB;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        margin-bottom: 10px;
+    }
+    .kpi-title { font-size: 0.9rem; opacity: 0.9; margin-bottom: 5px; font-weight: 400; }
+    .kpi-value { font-size: 2rem; font-weight: 800; margin: 0; line-height: 1.2;}
+    .kpi-subtitle { font-size: 0.8rem; opacity: 0.7; margin-top: 5px;}
+    
+    /* Inputs */
+    div[data-baseweb="input"], div[data-baseweb="select"] {
+        border-radius: 8px;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -114,44 +200,45 @@ usuarios_df = load_users()
 
 # --- PANTALLA DE LOGIN ---
 if not st.session_state.logueado:
-    st.title("🏡 Casa La Serena")
-    st.write("Por favor, inicia sesión para continuar.")
+    st.markdown("<h1 style='text-align: center; color: #1E3A8A; font-weight: 800; margin-bottom: 0;'>🏡 La Serena</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #6B7280; margin-bottom: 30px;'>Gestión y Contabilidad 50/50</p>", unsafe_allow_html=True)
     
-    with st.form("login_form"):
-        usuario = st.text_input("Usuario")
-        clave = st.text_input("Contraseña", type="password")
-        submit_login = st.form_submit_button("Ingresar al Proyecto")
-        
-        if submit_login:
-            user_match = usuarios_df[(usuarios_df["Usuario"] == usuario) & (usuarios_df["Clave"].astype(str) == str(clave))]
-            if not user_match.empty:
-                st.session_state.logueado = True
-                st.session_state.usuario_actual = usuario
-                st.rerun()
-            else:
-                st.error("Credenciales incorrectas.")
+    with st.container():
+        with st.form("login_form"):
+            usuario = st.text_input("Usuario")
+            clave = st.text_input("Contraseña", type="password")
+            st.markdown("<br>", unsafe_allow_html=True)
+            submit_login = st.form_submit_button("Ingresar Seguro", type="primary", use_container_width=True)
+            
+            if submit_login:
+                user_match = usuarios_df[(usuarios_df["Usuario"] == usuario) & (usuarios_df["Clave"].astype(str) == str(clave))]
+                if not user_match.empty:
+                    st.session_state.logueado = True
+                    st.session_state.usuario_actual = usuario
+                    st.rerun()
+                else:
+                    st.error("Credenciales incorrectas. Inténtalo nuevamente.")
 
 # --- APLICACIÓN PRINCIPAL ---
 else:
-    # --- MENÚ LATERAL DE PERFIL ---
+    # --- MENÚ LATERAL (Solo para ajustes rápidos) ---
     st.sidebar.title("🏡 La Serena")
     st.sidebar.write(f"👤 Conectado como: **{st.session_state.usuario_actual}**")
-    if st.sidebar.button("🚪 Cerrar Sesión"):
+    if st.sidebar.button("🚪 Cerrar Sesión", use_container_width=True):
         st.session_state.logueado = False
         st.session_state.usuario_actual = ""
         st.session_state.gasto_a_editar = None
         st.rerun()
         
     # --- MENÚ SUPERIOR DE NAVEGACIÓN ---
-    opciones_menu = ["📊 Dashboard", "📝 Gasto", "💸 Transf.", "📋 Historial", "⚖️ Balance", "👥 Perfiles"]
+    opciones_menu = ["📊 Dashboard", "📝 Gasto", "💸 Transf.", "📋 Historial", "⚖️ Balance"]
     
-    menu = st.radio(
-        "Navegación", 
-        opciones_menu, 
-        horizontal=True, 
-        label_visibility="collapsed"
-    )
-    st.markdown("---")
+    # Si es admin, le agregamos la pestaña de usuarios
+    if st.session_state.usuario_actual.lower() == "admin":
+        opciones_menu.append("👥 Admin")
+    
+    menu = st.radio("Navegación", opciones_menu, horizontal=True, label_visibility="collapsed")
+    st.markdown("<br>", unsafe_allow_html=True)
 
     if menu != "📋 Historial":
         st.session_state.gasto_a_editar = None
@@ -159,63 +246,71 @@ else:
     df_gastos = load_data()
     df_transfers = load_transfers()
 
-    # --- MÓDULO 1: MONITOREO DE GASTOS (DASHBOARD) ---
+    # --- MÓDULO 1: DASHBOARD ---
     if menu == "📊 Dashboard":
-        st.header("📊 Resumen de la Obra")
         if not df_gastos.empty:
             df_dash = df_gastos.copy()
             df_dash['Fecha'] = pd.to_datetime(df_dash['Fecha'])
             
-            # KPI Cards Rápidas Arriba
             total_invertido = df_dash["Monto_UYU"].sum()
-            col1, col2 = st.columns(2)
-            col1.metric("Inversión Total", f"${total_invertido:,.0f} UYU")
-            col2.metric("Total Registros", f"{len(df_dash)} Gastos")
-            st.markdown("---")
+            total_gastos = len(df_dash)
             
-            st.subheader("Distribución por Categoría")
+            # Tarjeta Premium HTML Inyectada
+            st.markdown(f"""
+                <div class="kpi-card-blue">
+                    <div class="kpi-title">INVERSIÓN TOTAL EN LA OBRA</div>
+                    <div class="kpi-value">${total_invertido:,.0f} <span style="font-size: 1rem; font-weight: 400;">UYU</span></div>
+                    <div class="kpi-subtitle">Basado en {total_gastos} comprobantes registrados.</div>
+                </div>
+            """, unsafe_allow_html=True)
+            
+            st.markdown("### 📈 Distribución del Presupuesto")
             gastos_cat = df_dash.groupby("Categoria")["Monto_UYU"].sum().reset_index()
-            fig_pie = px.pie(gastos_cat, values='Monto_UYU', names='Categoria', hole=0.5)
-            # Quitar márgenes al gráfico para que ocupe menos espacio en móvil
-            fig_pie.update_layout(margin=dict(t=0, b=0, l=0, r=0))
-            st.plotly_chart(fig_pie, use_container_width=True)
+            fig_pie = px.pie(gastos_cat, values='Monto_UYU', names='Categoria', hole=0.5, 
+                             color_discrete_sequence=px.colors.qualitative.Pastel)
+            fig_pie.update_layout(margin=dict(t=0, b=0, l=0, r=0), showlegend=True)
+            st.plotly_chart(fig_pie, use_container_width=True, config={'displayModeBar': False})
             
-            st.subheader("Evolución del Costo Acumulado")
+            st.markdown("### 🗓️ Ritmo de Gastos")
             gastos_fecha = df_dash.groupby("Fecha")["Monto_UYU"].sum().reset_index()
             gastos_fecha = gastos_fecha.sort_values("Fecha")
             gastos_fecha["Gasto_Acumulado"] = gastos_fecha["Monto_UYU"].cumsum()
-            fig_line = px.line(gastos_fecha, x='Fecha', y='Gasto_Acumulado', markers=True)
-            fig_line.update_layout(margin=dict(t=10, b=0, l=0, r=0))
-            st.plotly_chart(fig_line, use_container_width=True)
+            fig_line = px.line(gastos_fecha, x='Fecha', y='Gasto_Acumulado', markers=True, 
+                               color_discrete_sequence=["#2563EB"])
+            fig_line.update_layout(margin=dict(t=10, b=0, l=0, r=0), xaxis_title="", yaxis_title="Monto (UYU)")
+            st.plotly_chart(fig_line, use_container_width=True, config={'displayModeBar': False})
         else:
-            st.info("Aún no hay datos para mostrar gráficos. ¡Registra el primer gasto!")
+            st.info("👋 ¡Bienvenido! Registra tu primer gasto para ver los indicadores de la obra.")
 
     # --- MÓDULO 2: REGISTRAR GASTO ---
     elif menu == "📝 Gasto":
-        st.header("📝 Registrar Nuevo Gasto")
+        st.markdown("### 🛒 Registrar Compra o Pago")
         
         with st.container():
             fecha = st.date_input("Fecha", datetime.date.today())
-            concepto = st.text_input("Concepto (Ej. Cemento, Honorarios)")
+            concepto = st.text_input("Concepto / Descripción breve")
             
             col1, col2 = st.columns(2)
             moneda = col1.selectbox("Moneda", ["UYU", "USD"])
-            monto = col2.number_input(f"Monto ({moneda})", min_value=0.0, value=None, placeholder="Ej: 1500", format="%.2f")
+            monto = col2.number_input(f"Monto Total ({moneda})", min_value=0.0, value=None, placeholder="Ej: 15000", format="%.2f")
             
             tasa_cambio = 1.0
             if moneda == "USD":
                 tasa_sugerida = obtener_tasa_usd_uyu()
-                st.caption("ℹ️ Tipo de cambio referencial automático.")
-                tasa_cambio = st.number_input("Tasa de cambio", min_value=1.0, value=float(tasa_sugerida), format="%.2f")
+                st.caption(f"ℹ️ Cotización referencial automática: ${tasa_sugerida}")
+                tasa_cambio = st.number_input("Tasa de cambio a aplicar", min_value=1.0, value=float(tasa_sugerida), format="%.2f")
             
             lista_usuarios = usuarios_df["Usuario"].tolist()
             indice_usuario = lista_usuarios.index(st.session_state.usuario_actual) if st.session_state.usuario_actual in lista_usuarios else 0
-            pagado_por = st.selectbox("¿Quién lo pagó?", lista_usuarios, index=indice_usuario)
+            pagado_por = st.selectbox("¿Quién puso el dinero?", lista_usuarios, index=indice_usuario)
             
-            categoria = st.selectbox("Categoría", ["Materiales", "Mano de Obra", "Trámites/Permisos", "Terreno", "Otros"])
-            archivo_adjunto = st.file_uploader("Adjuntar Foto/Boleta (Opcional)", type=["pdf", "png", "jpg", "jpeg"])
+            categoria = st.selectbox("Categoría contable", ["Materiales", "Mano de Obra", "Trámites/Permisos", "Terreno", "Otros"])
             
-            if st.button("💾 Guardar Registro", type="primary", use_container_width=True):
+            st.markdown("<br>", unsafe_allow_html=True)
+            archivo_adjunto = st.file_uploader("📸 Adjuntar Factura/Boleta", type=["pdf", "png", "jpg", "jpeg"])
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("Guardar Gasto", type="primary", use_container_width=True):
                 if monto is None or monto <= 0:
                     st.error("Por favor, ingresa un monto válido mayor a 0.")
                 elif not concepto:
@@ -247,20 +342,18 @@ else:
                     
                     df_gastos = pd.concat([df_gastos, nuevo_dato], ignore_index=True)
                     save_data(df_gastos, DATA_FILE)
-                    
-                    # Notificación nativa tipo pop-up
                     st.toast(f"¡Gasto de ${monto_uyu:,.0f} guardado con éxito!", icon="✅")
 
-    # --- MÓDULO 3: REGISTRAR TRANSFERENCIA ---
+    # --- MÓDULO 3: TRANSFERENCIAS ---
     elif menu == "💸 Transf.":
-        st.header("💸 Rendición de Cuentas")
+        st.markdown("### 💸 Rendición y Giros")
         
         lista_usuarios = [u for u in usuarios_df["Usuario"].tolist() if str(u).lower().strip() != "admin"]
         
         if len(lista_usuarios) < 2:
             st.info("Necesitas crear al menos 2 cuentas de socios para registrar transferencias.")
         else:
-            fecha = st.date_input("Fecha", datetime.date.today())
+            fecha = st.date_input("Fecha de envío", datetime.date.today())
             
             col1, col2 = st.columns(2)
             idx_origen = lista_usuarios.index(st.session_state.usuario_actual) if st.session_state.usuario_actual in lista_usuarios else 0
@@ -277,9 +370,10 @@ else:
             if moneda == "USD":
                 tasa_cambio = st.number_input("Tasa de cambio", min_value=1.0, value=float(obtener_tasa_usd_uyu()), format="%.2f")
 
-            archivo_adjunto = st.file_uploader("Adjuntar comprobante bancario (Opcional)", type=["pdf", "png", "jpg", "jpeg"])
+            archivo_adjunto = st.file_uploader("📸 Comprobante bancario", type=["pdf", "png", "jpg", "jpeg"])
             
-            if st.button("📤 Guardar Transferencia", type="primary", use_container_width=True):
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("Registrar Transferencia", type="primary", use_container_width=True):
                 if monto is None or monto <= 0:
                     st.error("Ingresa un monto válido mayor a 0.")
                 else:
@@ -308,9 +402,9 @@ else:
                     save_data(df_transfers, TRANSFERS_FILE)
                     st.toast(f"¡Transferencia a {destino} guardada!", icon="✅")
 
-    # --- MÓDULO 4: LISTADO DE GASTOS E HISTORIAL ---
+    # --- MÓDULO 4: HISTORIAL ---
     elif menu == "📋 Historial":
-        st.header("📋 Historial de Movimientos")
+        st.markdown("### 📋 Libro Mayor")
         
         if not df_gastos.empty:
             if st.session_state.gasto_a_editar is None:
@@ -319,36 +413,39 @@ else:
                 
                 for _, fila in df_ordenado.iterrows():
                     es_dueno = str(fila["Pagado_por"]).strip().lower() == str(st.session_state.usuario_actual).strip().lower()
-                    icono_socio = "🟢" if es_dueno else "🔵"
+                    icono = "💳" if es_dueno else "🧾"
                     
-                    titulo_tarjeta = f"{icono_socio} {fila['Fecha']} | {fila['Concepto']} | ${fila['Monto_Original']:,.2f} {fila['Moneda']}"
+                    titulo_tarjeta = f"{icono} **{fila['Concepto']}** —  ${fila['Monto_Original']:,.2f} {fila['Moneda']}"
                     
                     with st.expander(titulo_tarjeta):
                         if fila.get("Modificado_por_Admin", False):
-                            st.caption("⚠️ *Modificado por Admin*")
+                            st.caption("⚠️ *Aviso: Modificado por Administrador*")
 
-                        col_a, col_b = st.columns(2)
-                        col_a.write(f"**Pagó:** {fila['Pagado_por']}")
-                        col_b.write(f"**Cat:** {fila['Categoria']}")
-                        st.write(f"**Base:** ${fila['Monto_UYU']:,.2f} UYU")
+                        st.markdown(f"""
+                        <div style="font-size: 0.9rem; color: #4B5563;">
+                            <b>Fecha:</b> {fila['Fecha']}<br>
+                            <b>Socio:</b> {fila['Pagado_por']}<br>
+                            <b>Categoría:</b> {fila['Categoria']}<br>
+                            <b>Impacto Balance:</b> ${fila['Monto_UYU']:,.2f} UYU
+                        </div>
+                        """, unsafe_allow_html=True)
+                        st.markdown("<br>", unsafe_allow_html=True)
                         
-                        # MEJORA UX: Visualizador de imágenes integrado
                         if fila['Archivo_Adjunto'] != "Sin adjunto":
                             ruta_img = os.path.join(DIR_COMPROBANTES, fila['Archivo_Adjunto'])
                             if os.path.exists(ruta_img) and ruta_img.lower().endswith(('.png', '.jpg', '.jpeg')):
-                                st.image(ruta_img, caption="Comprobante Adjunto", use_container_width=True)
+                                st.image(ruta_img, use_container_width=True)
                             else:
-                                st.write(f"📎 **Documento:** {fila['Archivo_Adjunto']}")
+                                st.write(f"📎 **Documento adjunto:** {fila['Archivo_Adjunto']}")
                         else:
-                            st.write("📄 *Sin foto adjunta*")
+                            st.caption("📄 *No hay comprobantes adjuntos*")
                         
-                        st.markdown("---")
                         if es_dueno or es_admin:
-                            if st.button("✏️ Editar Gasto", key=f"btn_edit_{fila['ID']}", use_container_width=True):
+                            if st.button("✏️ Editar", key=f"btn_edit_{fila['ID']}", use_container_width=True):
                                 st.session_state.gasto_a_editar = fila["ID"]
                                 st.rerun()
                         else:
-                            st.caption("🔒 Solo el dueño o el Administrador pueden editar este gasto.")
+                            st.caption("🔒 Solo el dueño o el Administrador pueden editar.")
 
             # VISTA DE EDICIÓN
             else:
@@ -358,93 +455,93 @@ else:
                 es_admin = str(st.session_state.usuario_actual).strip().lower() == "admin"
                 es_dueno = str(fila_actual["Pagado_por"]).strip().lower() == str(st.session_state.usuario_actual).strip().lower()
 
-                if st.button("🔙 Volver a la lista"):
+                if st.button("🔙 Volver", use_container_width=True):
                     st.session_state.gasto_a_editar = None
                     st.rerun()
                 
-                st.subheader(f"Editando: {fila_actual['Concepto']}")
+                st.markdown(f"### ✏️ Editando: {fila_actual['Concepto']}")
+                if es_admin and not es_dueno:
+                    st.warning("⚠️ Modo Admin: Quedará registro de esta modificación externa.")
                 
-                fecha_obj = datetime.datetime.strptime(str(fila_actual["Fecha"]), "%Y-%m-%d").date() if isinstance(fila_actual["Fecha"], str) else fila_actual["Fecha"]
-                edit_fecha = st.date_input("Fecha", fecha_obj)
-                edit_concepto = st.text_input("Concepto", fila_actual["Concepto"])
-                
-                col1, col2 = st.columns(2)
-                idx_moneda = ["UYU", "USD"].index(fila_actual["Moneda"]) if fila_actual["Moneda"] in ["UYU", "USD"] else 0
-                edit_moneda = col1.selectbox("Moneda", ["UYU", "USD"], index=idx_moneda)
-                edit_monto = col2.number_input("Monto", min_value=0.0, value=float(fila_actual["Monto_Original"]), format="%.2f")
-                
-                edit_tasa = 1.0
-                if edit_moneda == "USD":
-                    edit_tasa = st.number_input("Tasa aplicada", min_value=1.0, value=float(fila_actual["Tasa_Cambio"]), format="%.2f")
-                
-                categorias = ["Materiales", "Mano de Obra", "Trámites/Permisos", "Terreno", "Otros"]
-                idx_cat = categorias.index(fila_actual["Categoria"]) if fila_actual["Categoria"] in categorias else 0
-                edit_categoria = st.selectbox("Categoría", categorias, index=idx_cat)
-                
-                st.write(f"📁 Documento actual: **{fila_actual['Archivo_Adjunto']}**")
-                nuevo_archivo = st.file_uploader("Reemplazar foto", type=["pdf", "png", "jpg", "jpeg"])
-                
-                st.markdown("---")
-                col_save, col_del = st.columns(2)
-                
-                # Botón Guardar
-                if col_save.button("💾 Guardar", type="primary", use_container_width=True):
-                    cambios_log = []
-                    if str(edit_fecha) != str(fila_actual["Fecha"]): cambios_log.append("Fecha")
-                    if edit_concepto != fila_actual["Concepto"]: cambios_log.append("Concepto")
-                    if edit_moneda != fila_actual["Moneda"]: cambios_log.append("Moneda")
-                    if float(edit_monto) != float(fila_actual["Monto_Original"]): cambios_log.append("Monto")
-                    if edit_categoria != fila_actual["Categoria"]: cambios_log.append("Categoría")
+                with st.container():
+                    fecha_obj = datetime.datetime.strptime(str(fila_actual["Fecha"]), "%Y-%m-%d").date() if isinstance(fila_actual["Fecha"], str) else fila_actual["Fecha"]
+                    edit_fecha = st.date_input("Fecha", fecha_obj)
+                    edit_concepto = st.text_input("Concepto", fila_actual["Concepto"])
                     
-                    nombre_archivo_final = fila_actual["Archivo_Adjunto"]
-                    if nuevo_archivo is not None:
-                        nombre_archivo_final = f"{edit_fecha}_{nuevo_archivo.name}"
-                        ruta_guardado = os.path.join(DIR_COMPROBANTES, nombre_archivo_final)
-                        with open(ruta_guardado, "wb") as f:
-                            f.write(nuevo_archivo.getbuffer())
-                        cambios_log.append("Archivo adjuntado")
+                    col1, col2 = st.columns(2)
+                    idx_moneda = ["UYU", "USD"].index(fila_actual["Moneda"]) if fila_actual["Moneda"] in ["UYU", "USD"] else 0
+                    edit_moneda = col1.selectbox("Moneda", ["UYU", "USD"], index=idx_moneda)
+                    edit_monto = col2.number_input("Monto", min_value=0.0, value=float(fila_actual["Monto_Original"]), format="%.2f")
+                    
+                    edit_tasa = 1.0
+                    if edit_moneda == "USD":
+                        edit_tasa = st.number_input("Tasa aplicada", min_value=1.0, value=float(fila_actual["Tasa_Cambio"]), format="%.2f")
+                    
+                    categorias = ["Materiales", "Mano de Obra", "Trámites/Permisos", "Terreno", "Otros"]
+                    idx_cat = categorias.index(fila_actual["Categoria"]) if fila_actual["Categoria"] in categorias else 0
+                    edit_categoria = st.selectbox("Categoría", categorias, index=idx_cat)
+                    
+                    st.write(f"📁 Documento actual: **{fila_actual['Archivo_Adjunto']}**")
+                    nuevo_archivo = st.file_uploader("Reemplazar foto", type=["pdf", "png", "jpg", "jpeg"])
+                    
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    col_save, col_del = st.columns(2)
+                    
+                    if col_save.button("💾 Guardar", type="primary", use_container_width=True):
+                        cambios_log = []
+                        if str(edit_fecha) != str(fila_actual["Fecha"]): cambios_log.append("Fecha")
+                        if edit_concepto != fila_actual["Concepto"]: cambios_log.append("Concepto")
+                        if edit_moneda != fila_actual["Moneda"]: cambios_log.append("Moneda")
+                        if float(edit_monto) != float(fila_actual["Monto_Original"]): cambios_log.append("Monto")
+                        if edit_categoria != fila_actual["Categoria"]: cambios_log.append("Categoría")
+                        
+                        nombre_archivo_final = fila_actual["Archivo_Adjunto"]
+                        if nuevo_archivo is not None:
+                            nombre_archivo_final = f"{edit_fecha}_{nuevo_archivo.name}"
+                            ruta_guardado = os.path.join(DIR_COMPROBANTES, nombre_archivo_final)
+                            with open(ruta_guardado, "wb") as f:
+                                f.write(nuevo_archivo.getbuffer())
+                            cambios_log.append("Archivo adjuntado")
 
-                    nuevo_monto_uyu = edit_monto * edit_tasa
-                    idx_general = df_gastos[df_gastos["ID"] == id_seleccionado].index[0]
-                    
-                    df_gastos.at[idx_general, "Fecha"] = edit_fecha
-                    df_gastos.at[idx_general, "Concepto"] = edit_concepto
-                    df_gastos.at[idx_general, "Moneda"] = edit_moneda
-                    df_gastos.at[idx_general, "Monto_Original"] = edit_monto
-                    df_gastos.at[idx_general, "Tasa_Cambio"] = edit_tasa
-                    df_gastos.at[idx_general, "Monto_UYU"] = nuevo_monto_uyu
-                    df_gastos.at[idx_general, "Categoria"] = edit_categoria
-                    df_gastos.at[idx_general, "Archivo_Adjunto"] = nombre_archivo_final
-                    
-                    if es_admin and not es_dueno:
-                        df_gastos.at[idx_general, "Modificado_por_Admin"] = True
-                    
-                    save_data(df_gastos, DATA_FILE)
-                    registrar_log(id_seleccionado, st.session_state.usuario_actual, f"Editado: {','.join(cambios_log)}")
-                    
-                    st.toast("¡Modificaciones guardadas exitosamente!", icon="✅")
-                    st.session_state.gasto_a_editar = None
-                    st.rerun()
+                        nuevo_monto_uyu = edit_monto * edit_tasa
+                        idx_general = df_gastos[df_gastos["ID"] == id_seleccionado].index[0]
+                        
+                        df_gastos.at[idx_general, "Fecha"] = edit_fecha
+                        df_gastos.at[idx_general, "Concepto"] = edit_concepto
+                        df_gastos.at[idx_general, "Moneda"] = edit_moneda
+                        df_gastos.at[idx_general, "Monto_Original"] = edit_monto
+                        df_gastos.at[idx_general, "Tasa_Cambio"] = edit_tasa
+                        df_gastos.at[idx_general, "Monto_UYU"] = nuevo_monto_uyu
+                        df_gastos.at[idx_general, "Categoria"] = edit_categoria
+                        df_gastos.at[idx_general, "Archivo_Adjunto"] = nombre_archivo_final
+                        
+                        if es_admin and not es_dueno:
+                            df_gastos.at[idx_general, "Modificado_por_Admin"] = True
+                        
+                        save_data(df_gastos, DATA_FILE)
+                        registrar_log(id_seleccionado, st.session_state.usuario_actual, f"Editado: {','.join(cambios_log)}")
+                        
+                        st.toast("¡Cambios guardados!", icon="✅")
+                        st.session_state.gasto_a_editar = None
+                        st.rerun()
 
-                # Botón Eliminar
-                if col_del.button("🗑️ Eliminar Gasto", use_container_width=True):
-                    df_gastos = df_gastos[df_gastos["ID"] != id_seleccionado]
-                    save_data(df_gastos, DATA_FILE)
-                    registrar_log(id_seleccionado, st.session_state.usuario_actual, "ELIMINADO COMPLETAMENTE")
-                    st.toast("Registro eliminado.", icon="🗑️")
-                    st.session_state.gasto_a_editar = None
-                    st.rerun()
-                    
+                    if col_del.button("🗑️ Eliminar", use_container_width=True):
+                        df_gastos = df_gastos[df_gastos["ID"] != id_seleccionado]
+                        save_data(df_gastos, DATA_FILE)
+                        registrar_log(id_seleccionado, st.session_state.usuario_actual, "ELIMINADO COMPLETAMENTE")
+                        st.toast("Registro eliminado definitivamente.", icon="🗑️")
+                        st.session_state.gasto_a_editar = None
+                        st.rerun()
         else:
-            st.info("Aún no hay gastos registrados en el proyecto.")
+            st.info("Aún no hay movimientos en el libro mayor.")
 
     # --- MÓDULO 5: BALANCE 50/50 ---
     elif menu == "⚖️ Balance":
-        st.header("⚖️ Estado de Cuentas")
+        st.markdown("### ⚖️ Balance 50/50")
         
         usuarios_socios = [u for u in usuarios_df["Usuario"].tolist() if str(u).lower().strip() != "admin"]
         if len(usuarios_socios) < 2:
-            st.info("⚠️ Se necesitan 2 socios creados para calcular el balance.")
+            st.info("⚠️ Crea al menos 2 cuentas de socios para ver el cálculo matemático.")
         else:
             usuario_1 = usuarios_socios[0]
             usuario_2 = usuarios_socios[1]
@@ -465,48 +562,74 @@ else:
             
             diferencia = abs(saldo_1 - meta_individual)
 
-            # Tarjeta visual destacada del veredicto final
+            # Tarjeta de Veredicto Principal (Diseño Custom HTML)
             if diferencia < 1: 
-                st.success("🎉 **¡Están perfectamente al día! Nadie debe nada.**")
+                color_card = "kpi-card-green"
+                titulo_alerta = "¡CUENTAS CLARAS!"
+                mensaje_alerta = "Ambos socios están al día. Nadie debe dinero."
             elif saldo_1 > meta_individual:
-                st.error(f"👉 **{usuario_2}** debe transferirle a **{usuario_1}**: \n\n ### ${diferencia:,.0f} UYU")
+                color_card = "kpi-card-blue"
+                titulo_alerta = f"ACCIONES REQUERIDAS"
+                mensaje_alerta = f"{usuario_2} debe enviar a {usuario_1}:<br><span style='font-size: 2.5rem; font-weight: 800;'>${diferencia:,.0f}</span> <span style='font-size:1rem'>UYU</span>"
             else:
-                st.error(f"👉 **{usuario_1}** debe transferirle a **{usuario_2}**: \n\n ### ${diferencia:,.0f} UYU")
+                color_card = "kpi-card-blue"
+                titulo_alerta = f"ACCIONES REQUERIDAS"
+                mensaje_alerta = f"{usuario_1} debe enviar a {usuario_2}:<br><span style='font-size: 2.5rem; font-weight: 800;'>${diferencia:,.0f}</span> <span style='font-size:1rem'>UYU</span>"
 
-            st.markdown("---")
-            st.write(f"**Costo total acumulado:** ${total_proyecto:,.0f} UYU")
-            st.write(f"*(Aporte ideal por socio: ${meta_individual:,.0f} UYU)*")
+            st.markdown(f"""
+                <div class="{color_card}" style="text-align: center; margin-bottom: 30px;">
+                    <div class="kpi-title" style="font-weight: 600; letter-spacing: 1px;">{titulo_alerta}</div>
+                    <div style="font-size: 1.2rem; margin-top: 10px;">{mensaje_alerta}</div>
+                </div>
+            """, unsafe_allow_html=True)
             
+            # Tarjetas individuales de resumen
             col1, col2 = st.columns(2)
             with col1:
-                st.markdown(f"#### 👤 {usuario_1}")
-                st.caption(f"Pagó en obra: ${gastos_1:,.0f}")
-                st.caption(f"Transferencias: ${(enviado_1 - recibido_1):,.0f}")
-                st.write(f"**Aporte Neto:** ${saldo_1:,.0f}")
+                st.markdown(f"""
+                    <div class="kpi-card-white">
+                        <div style="color:#2563EB; font-weight:800; font-size:1.1rem; margin-bottom:10px;">👤 {usuario_1}</div>
+                        <div style="font-size: 0.9rem; color: #4B5563;">
+                            Gastos en Obra: <b style="float:right;">${gastos_1:,.0f}</b><br>
+                            Girado: <span style="float:right; color:#10B981;">+${enviado_1:,.0f}</span><br>
+                            Recibido: <span style="float:right; color:#EF4444;">-${recibido_1:,.0f}</span><br>
+                            <hr style="margin: 8px 0;">
+                            <b>Aporte Neto: <span style="float:right; color:#111827;">${saldo_1:,.0f}</span></b>
+                        </div>
+                    </div>
+                """, unsafe_allow_html=True)
                 
             with col2:
-                st.markdown(f"#### 👤 {usuario_2}")
-                st.caption(f"Pagó en obra: ${gastos_2:,.0f}")
-                st.caption(f"Transferencias: ${(enviado_2 - recibido_2):,.0f}")
-                st.write(f"**Aporte Neto:** ${saldo_2:,.0f}")
+                st.markdown(f"""
+                    <div class="kpi-card-white">
+                        <div style="color:#2563EB; font-weight:800; font-size:1.1rem; margin-bottom:10px;">👤 {usuario_2}</div>
+                        <div style="font-size: 0.9rem; color: #4B5563;">
+                            Gastos en Obra: <b style="float:right;">${gastos_2:,.0f}</b><br>
+                            Girado: <span style="float:right; color:#10B981;">+${enviado_2:,.0f}</span><br>
+                            Recibido: <span style="float:right; color:#EF4444;">-${recibido_2:,.0f}</span><br>
+                            <hr style="margin: 8px 0;">
+                            <b>Aporte Neto: <span style="float:right; color:#111827;">${saldo_2:,.0f}</span></b>
+                        </div>
+                    </div>
+                """, unsafe_allow_html=True)
 
-    # --- MÓDULO 6: GESTIONAR USUARIOS ---
-    elif menu == "👥 Perfiles":
-        st.header("👥 Usuarios")
+    # --- MÓDULO 6: ADMIN (USUARIOS) ---
+    elif menu == "👥 Admin":
+        st.header("👥 Gestión Interna")
         st.dataframe(usuarios_df[["Usuario"]], use_container_width=True)
         
         st.markdown("---")
-        st.subheader("Agregar Nuevo Socio")
-        with st.form("nuevo_usuario"):
+        st.subheader("Registrar Socio")
+        with st.container():
             nuevo_nombre = st.text_input("Nombre de Usuario")
             nueva_clave = st.text_input("Contraseña", type="password")
-            
-            if st.form_submit_button("Crear Usuario", use_container_width=True):
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("Crear Usuario", type="primary", use_container_width=True):
                 if nuevo_nombre in usuarios_df["Usuario"].values:
                     st.error("Ese usuario ya existe.")
                 elif nuevo_nombre and nueva_clave:
                     nuevo_usr = pd.DataFrame([{"Usuario": nuevo_nombre, "Clave": nueva_clave}])
                     usuarios_df = pd.concat([usuarios_df, nuevo_usr], ignore_index=True)
                     save_data(usuarios_df, USERS_FILE)
-                    st.toast(f"Usuario '{nuevo_nombre}' creado.", icon="✅")
+                    st.toast(f"Usuario '{nuevo_nombre}' habilitado.", icon="✅")
                     st.rerun()
