@@ -111,14 +111,14 @@ else:
     st.sidebar.markdown("---")
     menu = st.sidebar.selectbox("Navegación", [
         "Registrar Gasto", 
-        "Mis Gastos (Editar)",
+        "Listado de Gastos",
         "Balance General", 
         "Monitoreo de Gastos", 
         "Gestionar Usuarios"
     ])
 
-    # Si salimos de la pestaña de edición, limpiamos la memoria para no quedar atascados
-    if menu != "Mis Gastos (Editar)":
+    # Limpiamos el estado de edición si el usuario cambia de pestaña
+    if menu != "Listado de Gastos":
         st.session_state.gasto_a_editar = None
 
     df_gastos = load_data()
@@ -179,121 +179,126 @@ else:
                 save_data(df_gastos, DATA_FILE)
                 st.success(f"¡Gasto registrado con éxito! Equivalente: **${monto_uyu:,.2f} UYU**")
 
-    # --- MÓDULO 2: MIS GASTOS (VISTA DE LISTA Y EDICIÓN) ---
-    elif menu == "Mis Gastos (Editar)":
-        st.header("✏️ Modificar mis registros")
+    # --- MÓDULO 2: LISTADO DE GASTOS (VISTA DE LISTA Y EDICIÓN) ---
+    elif menu == "Listado de Gastos":
+        st.header("📋 Historial del Proyecto")
         
-        mis_gastos = df_gastos[df_gastos["Pagado_por"] == st.session_state.usuario_actual]
-        
-        if not mis_gastos.empty:
-            # VISTA 1: LISTA ORDENADA
+        if not df_gastos.empty:
+            # VISTA 1: LISTA ORDENADA PARA TODOS
             if st.session_state.gasto_a_editar is None:
-                st.write("Listado de tus gastos ordenados por fecha. Toca el lápiz para modificar o adjuntar documentos.")
+                st.write("Historial completo. Solo puedes editar los gastos que tú hayas registrado (✏️).")
                 
-                # Ordenar por fecha (más recientes primero)
-                mis_gastos = mis_gastos.sort_values(by="Fecha", ascending=False)
+                df_ordenado = df_gastos.sort_values(by="Fecha", ascending=False)
                 
-                # Encabezados de las columnas visuales
-                col1, col2, col3, col4, col5 = st.columns([2, 3, 2, 2, 1])
+                col1, col2, col3, col4, col5, col6 = st.columns([2, 3, 2, 1, 2, 1])
                 col1.markdown("**Fecha**")
                 col2.markdown("**Concepto**")
                 col3.markdown("**Monto**")
                 col4.markdown("**Moneda**")
-                col5.markdown("**Editar**")
+                col5.markdown("**Socio**")
+                col6.markdown("**Acción**")
                 st.markdown("---")
                 
-                # Dibujar cada fila
-                for _, fila in mis_gastos.iterrows():
-                    c1, c2, c3, c4, c5 = st.columns([2, 3, 2, 2, 1])
+                for _, fila in df_ordenado.iterrows():
+                    c1, c2, c3, c4, c5, c6 = st.columns([2, 3, 2, 1, 2, 1])
                     c1.write(fila["Fecha"])
                     c2.write(fila["Concepto"])
                     c3.write(f"${fila['Monto_Original']:,.2f}")
                     c4.write(fila["Moneda"])
+                    c5.write(fila["Pagado_por"])
                     
-                    # Botón individual para cada fila
-                    if c5.button("✏️", key=f"btn_{fila['ID']}"):
-                        st.session_state.gasto_a_editar = fila["ID"]
-                        st.rerun()
+                    with c6:
+                        # Validación de seguridad visual
+                        if fila["Pagado_por"] == st.session_state.usuario_actual:
+                            if st.button("✏️", key=f"btn_{fila['ID']}"):
+                                st.session_state.gasto_a_editar = fila["ID"]
+                                st.rerun()
+                        else:
+                            st.write("🔒")
 
-            # VISTA 2: FORMULARIO DE EDICIÓN
+            # VISTA 2: FORMULARIO DE EDICIÓN (SOLO PARA EL CREADOR)
             else:
                 id_seleccionado = st.session_state.gasto_a_editar
-                
-                # Botón para volver atrás
-                if st.button("🔙 Volver a la lista de gastos"):
-                    st.session_state.gasto_a_editar = None
-                    st.rerun()
-                
                 fila_actual = df_gastos[df_gastos["ID"] == id_seleccionado].iloc[0]
                 
-                st.markdown("---")
-                st.subheader(f"Editando: {fila_actual['Concepto']}")
-                
-                with st.form("form_edicion"):
-                    fecha_obj = datetime.datetime.strptime(str(fila_actual["Fecha"]), "%Y-%m-%d").date() if isinstance(fila_actual["Fecha"], str) else fila_actual["Fecha"]
+                # Segunda validación de seguridad (por si alguien fuerza el estado)
+                if fila_actual["Pagado_por"] != st.session_state.usuario_actual:
+                    st.error("No tienes permisos para editar este gasto.")
+                    if st.button("🔙 Volver"):
+                        st.session_state.gasto_a_editar = None
+                        st.rerun()
+                else:
+                    if st.button("🔙 Volver a la lista de gastos"):
+                        st.session_state.gasto_a_editar = None
+                        st.rerun()
                     
-                    edit_fecha = st.date_input("Fecha", fecha_obj)
-                    edit_concepto = st.text_input("Concepto", fila_actual["Concepto"])
+                    st.markdown("---")
+                    st.subheader(f"Editando: {fila_actual['Concepto']}")
                     
-                    col1, col2 = st.columns(2)
-                    idx_moneda = ["UYU", "USD"].index(fila_actual["Moneda"]) if fila_actual["Moneda"] in ["UYU", "USD"] else 0
-                    edit_moneda = col1.selectbox("Moneda", ["UYU", "USD"], index=idx_moneda)
-                    edit_monto = col2.number_input("Monto", min_value=0.0, value=float(fila_actual["Monto_Original"]), format="%.2f")
-                    
-                    edit_tasa = 1.0
-                    if edit_moneda == "USD":
-                        edit_tasa = st.number_input("Tasa de cambio aplicada", min_value=1.0, value=float(fila_actual["Tasa_Cambio"]), format="%.2f")
-                    
-                    categorias = ["Materiales", "Mano de Obra", "Trámites/Permisos", "Terreno", "Otros"]
-                    idx_cat = categorias.index(fila_actual["Categoria"]) if fila_actual["Categoria"] in categorias else 0
-                    edit_categoria = st.selectbox("Categoría", categorias, index=idx_cat)
-                    
-                    st.write(f"📁 Documento actual: **{fila_actual['Archivo_Adjunto']}**")
-                    nuevo_archivo = st.file_uploader("Subir documento nuevo (Reemplaza al anterior)", type=["pdf", "png", "jpg", "jpeg"])
-                    
-                    guardar_cambios = st.form_submit_button("Guardar Modificaciones")
-                    
-                    if guardar_cambios:
-                        cambios_log = []
+                    with st.form("form_edicion"):
+                        fecha_obj = datetime.datetime.strptime(str(fila_actual["Fecha"]), "%Y-%m-%d").date() if isinstance(fila_actual["Fecha"], str) else fila_actual["Fecha"]
                         
-                        if str(edit_fecha) != str(fila_actual["Fecha"]): cambios_log.append(f"Fecha ({fila_actual['Fecha']} -> {edit_fecha})")
-                        if edit_concepto != fila_actual["Concepto"]: cambios_log.append(f"Concepto ('{fila_actual['Concepto']}' -> '{edit_concepto}')")
-                        if edit_moneda != fila_actual["Moneda"]: cambios_log.append(f"Moneda ({fila_actual['Moneda']} -> {edit_moneda})")
-                        if edit_monto != fila_actual["Monto_Original"]: cambios_log.append(f"Monto ({fila_actual['Monto_Original']} -> {edit_monto})")
-                        if edit_categoria != fila_actual["Categoria"]: cambios_log.append(f"Categoría ({fila_actual['Categoria']} -> {edit_categoria})")
+                        edit_fecha = st.date_input("Fecha", fecha_obj)
+                        edit_concepto = st.text_input("Concepto", fila_actual["Concepto"])
                         
-                        nombre_archivo_final = fila_actual["Archivo_Adjunto"]
-                        if nuevo_archivo is not None:
-                            nombre_archivo_final = f"{edit_fecha}_{nuevo_archivo.name}"
-                            ruta_guardado = os.path.join(DIR_COMPROBANTES, nombre_archivo_final)
-                            with open(ruta_guardado, "wb") as f:
-                                f.write(nuevo_archivo.getbuffer())
-                            cambios_log.append(f"Archivo adjuntado ({nuevo_archivo.name})")
+                        col1, col2 = st.columns(2)
+                        idx_moneda = ["UYU", "USD"].index(fila_actual["Moneda"]) if fila_actual["Moneda"] in ["UYU", "USD"] else 0
+                        edit_moneda = col1.selectbox("Moneda", ["UYU", "USD"], index=idx_moneda)
+                        edit_monto = col2.number_input("Monto", min_value=0.0, value=float(fila_actual["Monto_Original"]), format="%.2f")
+                        
+                        edit_tasa = 1.0
+                        if edit_moneda == "USD":
+                            edit_tasa = st.number_input("Tasa de cambio aplicada", min_value=1.0, value=float(fila_actual["Tasa_Cambio"]), format="%.2f")
+                        
+                        categorias = ["Materiales", "Mano de Obra", "Trámites/Permisos", "Terreno", "Otros"]
+                        idx_cat = categorias.index(fila_actual["Categoria"]) if fila_actual["Categoria"] in categorias else 0
+                        edit_categoria = st.selectbox("Categoría", categorias, index=idx_cat)
+                        
+                        st.write(f"📁 Documento actual: **{fila_actual['Archivo_Adjunto']}**")
+                        nuevo_archivo = st.file_uploader("Subir documento nuevo (Reemplaza al anterior)", type=["pdf", "png", "jpg", "jpeg"])
+                        
+                        guardar_cambios = st.form_submit_button("Guardar Modificaciones")
+                        
+                        if guardar_cambios:
+                            cambios_log = []
+                            
+                            if str(edit_fecha) != str(fila_actual["Fecha"]): cambios_log.append(f"Fecha ({fila_actual['Fecha']} -> {edit_fecha})")
+                            if edit_concepto != fila_actual["Concepto"]: cambios_log.append(f"Concepto ('{fila_actual['Concepto']}' -> '{edit_concepto}')")
+                            if edit_moneda != fila_actual["Moneda"]: cambios_log.append(f"Moneda ({fila_actual['Moneda']} -> {edit_moneda})")
+                            if edit_monto != fila_actual["Monto_Original"]: cambios_log.append(f"Monto ({fila_actual['Monto_Original']} -> {edit_monto})")
+                            if edit_categoria != fila_actual["Categoria"]: cambios_log.append(f"Categoría ({fila_actual['Categoria']} -> {edit_categoria})")
+                            
+                            nombre_archivo_final = fila_actual["Archivo_Adjunto"]
+                            if nuevo_archivo is not None:
+                                nombre_archivo_final = f"{edit_fecha}_{nuevo_archivo.name}"
+                                ruta_guardado = os.path.join(DIR_COMPROBANTES, nombre_archivo_final)
+                                with open(ruta_guardado, "wb") as f:
+                                    f.write(nuevo_archivo.getbuffer())
+                                cambios_log.append(f"Archivo adjuntado ({nuevo_archivo.name})")
 
-                        if cambios_log:
-                            nuevo_monto_uyu = edit_monto * edit_tasa
-                            
-                            idx_general = df_gastos[df_gastos["ID"] == id_seleccionado].index[0]
-                            df_gastos.at[idx_general, "Fecha"] = edit_fecha
-                            df_gastos.at[idx_general, "Concepto"] = edit_concepto
-                            df_gastos.at[idx_general, "Moneda"] = edit_moneda
-                            df_gastos.at[idx_general, "Monto_Original"] = edit_monto
-                            df_gastos.at[idx_general, "Tasa_Cambio"] = edit_tasa
-                            df_gastos.at[idx_general, "Monto_UYU"] = nuevo_monto_uyu
-                            df_gastos.at[idx_general, "Categoria"] = edit_categoria
-                            df_gastos.at[idx_general, "Archivo_Adjunto"] = nombre_archivo_final
-                            
-                            save_data(df_gastos, DATA_FILE)
-                            registrar_log(id_seleccionado, st.session_state.usuario_actual, " | ".join(cambios_log))
-                            
-                            st.success("¡Modificaciones guardadas!")
-                            # Volvemos a la lista automáticamente después de guardar
-                            st.session_state.gasto_a_editar = None
-                            st.rerun()
-                        else:
-                            st.info("No detecté ninguna modificación para guardar.")
+                            if cambios_log:
+                                nuevo_monto_uyu = edit_monto * edit_tasa
+                                
+                                idx_general = df_gastos[df_gastos["ID"] == id_seleccionado].index[0]
+                                df_gastos.at[idx_general, "Fecha"] = edit_fecha
+                                df_gastos.at[idx_general, "Concepto"] = edit_concepto
+                                df_gastos.at[idx_general, "Moneda"] = edit_moneda
+                                df_gastos.at[idx_general, "Monto_Original"] = edit_monto
+                                df_gastos.at[idx_general, "Tasa_Cambio"] = edit_tasa
+                                df_gastos.at[idx_general, "Monto_UYU"] = nuevo_monto_uyu
+                                df_gastos.at[idx_general, "Categoria"] = edit_categoria
+                                df_gastos.at[idx_general, "Archivo_Adjunto"] = nombre_archivo_final
+                                
+                                save_data(df_gastos, DATA_FILE)
+                                registrar_log(id_seleccionado, st.session_state.usuario_actual, " | ".join(cambios_log))
+                                
+                                st.success("¡Modificaciones guardadas!")
+                                st.session_state.gasto_a_editar = None
+                                st.rerun()
+                            else:
+                                st.info("No detecté ninguna modificación para guardar.")
         else:
-            st.info("Aún no tienes gastos registrados a tu nombre.")
+            st.info("Aún no hay gastos registrados en el proyecto.")
 
     # --- MÓDULO 3: BALANCE 50/50 ---
     elif menu == "Balance General":
@@ -327,10 +332,6 @@ else:
             else:
                 st.success("¡Están al día perfectamente equilibrados!")
                 
-            if not df_gastos.empty:
-                st.markdown("---")
-                st.write("📄 Detalle histórico de gastos:")
-                st.dataframe(df_gastos.drop(columns=["ID"], errors="ignore"), use_container_width=True)
         else:
             st.warning("⚠️ Ve a 'Gestionar Usuarios' y crea al menos 2 cuentas.")
 
