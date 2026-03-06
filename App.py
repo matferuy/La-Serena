@@ -167,6 +167,9 @@ if "gasto_a_editar" not in st.session_state:
     st.session_state.gasto_a_editar = None
 if "transfer_a_editar" not in st.session_state:
     st.session_state.transfer_a_editar = None
+# NUEVA VARIABLE PARA EL BOTÓN "➕"
+if "modo_registro" not in st.session_state:
+    st.session_state.modo_registro = None
 
 usuarios_df = load_users()
 
@@ -193,15 +196,29 @@ if not st.session_state.logueado:
 
 # --- APLICACIÓN PRINCIPAL ---
 else:
-    # --- MENÚ LATERAL ---
+    # --- MENÚ LATERAL (ACCIONES GLOBALES) ---
     st.sidebar.title("La Serena")
     st.sidebar.write(f"👤 Conectado: **{st.session_state.usuario_actual}**")
+    
+    st.sidebar.markdown("<br>", unsafe_allow_html=True)
+    
+    # Botones principales tipo "Flotante"
+    if st.sidebar.button("➕ NUEVO GASTO", type="primary", use_container_width=True):
+        st.session_state.modo_registro = "gasto"
+        st.rerun()
+        
+    if st.sidebar.button("➕ NUEVA TRANSFERENCIA", type="primary", use_container_width=True):
+        st.session_state.modo_registro = "transferencia"
+        st.rerun()
+        
+    st.sidebar.markdown("<br><hr>", unsafe_allow_html=True)
+    
     if st.sidebar.button("🚪 Cerrar Sesión", use_container_width=True):
         st.session_state.logueado = False
         st.session_state.usuario_actual = ""
-        st.session_state.gasto_a_editar = None
-        st.session_state.transfer_a_editar = None
+        st.session_state.modo_registro = None
         st.rerun()
+
         
     # --- MENÚ SUPERIOR DE PESTAÑAS (TABS) ---
     opciones_menu = ["📊 Dashboard", "🛒 Gastos", "💸 Transferencias", "🕰️ Historial", "⚖️ Balance"]
