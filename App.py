@@ -132,7 +132,6 @@ else:
     st.markdown("<hr style='margin: 5px 0px 15px 0px;'>", unsafe_allow_html=True)
 
     # --- BOTÓN DE ACCIÓN PRINCIPAL TIPO DROPDOWN ("+") ---
-    # Solo se muestra si no estamos llenando o editando un formulario
     if st.session_state.modo_registro is None and st.session_state.gasto_a_editar is None and st.session_state.transfer_a_editar is None:
         with st.expander("➕ NUEVO REGISTRO", expanded=False):
             col_btn_g, col_btn_t = st.columns(2)
@@ -229,7 +228,6 @@ else:
     # VISTA 3: PESTAÑAS PRINCIPALES (VISTA NORMAL)
     # =========================================================
     else:
-        # Pestañas de navegación
         opciones_menu = ["📊 Dashboard", "🕰️ Historial", "⚖️ Balance"]
         if es_admin: opciones_menu.append("⚙️ Admin")
         tabs = st.tabs(opciones_menu)
@@ -247,22 +245,37 @@ else:
                 with kpi2: st.markdown(f'<div class="kpi-card-green"><div class="kpi-title">Est. USD</div><div class="kpi-value">U$S {total_uyu/tasa_actual:,.0f}</div></div>', unsafe_allow_html=True)
                 with kpi3: st.markdown(f'<div class="kpi-card-dynamic"><div class="kpi-title">Registros</div><div class="kpi-value">{len(df_dash)}</div></div>', unsafe_allow_html=True)
 
+                st.markdown("<br>", unsafe_allow_html=True)
+
                 col_chart1, col_chart2 = st.columns(2)
                 with col_chart1:
-                    fig_pie = px.pie(df_dash.groupby("Categoria")["Monto_UYU"].sum().reset_index(), values='Monto_UYU', names='Categoria', hole=0.5)
+                    st.markdown("#### 📊 En qué se gastó")
+                    fig_pie = px.pie(df_dash.groupby("Categoria")["Monto_UYU"].sum().reset_index(), values='Monto_UYU', names='Categoria', hole=0.5, color_discrete_sequence=px.colors.qualitative.Pastel)
                     fig_pie.update_layout(margin=dict(t=10, b=0, l=0, r=0), showlegend=False, paper_bgcolor="rgba(0,0,0,0)")
                     st.plotly_chart(fig_pie, use_container_width=True, config={'displayModeBar': False})
                 with col_chart2:
-                    fig_bar = px.bar(df_dash.groupby("Pagado_por")["Monto_UYU"].sum().reset_index(), x='Pagado_por', y='Monto_UYU', text_auto='.2s')
-                    fig_bar.update_layout(margin=dict(t=10, b=0, l=0, r=0), xaxis_title="", yaxis_title="", paper_bgcolor="rgba(0,0,0,0)")
+                    st.markdown("#### 👥 Quién pagó (Gastos directos)")
+                    fig_bar = px.bar(df_dash.groupby("Pagado_por")["Monto_UYU"].sum().reset_index(), x='Pagado_por', y='Monto_UYU', text_auto='.2s', color='Pagado_por', color_discrete_sequence=["#3B82F6", "#10B981", "#F59E0B"])
+                    fig_bar.update_layout(margin=dict(t=10, b=0, l=0, r=0), showlegend=False, xaxis_title="", yaxis_title="", paper_bgcolor="rgba(0,0,0,0)")
                     st.plotly_chart(fig_bar, use_container_width=True, config={'displayModeBar': False})
+
+                st.markdown("---")
+                
+                # Gráfico de Evolución Apilado por Categoría
+                st.markdown("#### 📈 Evolución del gasto por tipo")
+                gastos_evolucion = df_dash.groupby(["Fecha", "Categoria"])["Monto_UYU"].sum().reset_index()
+                gastos_evolucion = gastos_evolucion.sort_values("Fecha")
+                gastos_evolucion["Gasto_Acumulado"] = gastos_evolucion.groupby("Categoria")["Monto_UYU"].cumsum()
+                
+                fig_area = px.area(gastos_evolucion, x='Fecha', y='Gasto_Acumulado', color='Categoria', color_discrete_sequence=px.colors.qualitative.Pastel)
+                fig_area.update_layout(margin=dict(t=10, b=10, l=0, r=0), xaxis_title="", yaxis_title="Acumulado (UYU)", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", legend=dict(orientation="h", yanchor="bottom", y=-0.5, xanchor="center", x=0.5, title_text=""))
+                st.plotly_chart(fig_area, use_container_width=True, config={'displayModeBar': False})
             else:
                 st.info("Sin registros aún.")
 
         # --- PESTAÑA 2: HISTORIAL ---
         with tabs[1]:
             if st.session_state.gasto_a_editar:
-                # Flujo rápido de edición de gasto
                 fila_actual = df_gastos[df_gastos["ID"] == st.session_state.gasto_a_editar].iloc[0]
                 if st.button("⬅️ Cancelar Edición"): st.session_state.gasto_a_editar = None; st.rerun()
                 st.markdown(f"**Editando:** {fila_actual['Concepto']}")
