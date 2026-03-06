@@ -117,7 +117,6 @@ else:
         "Gestionar Usuarios"
     ])
 
-    # Limpiamos el estado de edición si el usuario cambia de pestaña
     if menu != "Listado de Gastos":
         st.session_state.gasto_a_editar = None
 
@@ -132,7 +131,9 @@ else:
         
         col1, col2 = st.columns(2)
         moneda = col1.selectbox("Moneda", ["UYU", "USD"])
-        monto = col2.number_input(f"Monto en {moneda}", min_value=0.0, format="%.2f")
+        
+        # AQUÍ ESTÁ EL CAMBIO: value=None para que arranque vacío
+        monto = col2.number_input(f"Monto en {moneda}", min_value=0.0, value=None, placeholder="Ej: 1500", format="%.2f")
         
         tasa_cambio = 1.0
         if moneda == "USD":
@@ -149,8 +150,9 @@ else:
         archivo_adjunto = st.file_uploader("Adjuntar Boleta/Factura (Opcional - Puedes subirlo después)", type=["pdf", "png", "jpg", "jpeg"])
         
         if st.button("Guardar Gasto", type="primary"):
-            if monto <= 0:
-                st.error("El monto debe ser mayor a 0.")
+            # Verificamos que el monto no esté vacío ni sea cero
+            if monto is None or monto <= 0:
+                st.error("Debes ingresar un monto mayor a 0.")
             else:
                 monto_uyu = monto * tasa_cambio
                 nombre_archivo = "Sin adjunto"
@@ -184,7 +186,6 @@ else:
         st.header("📋 Historial del Proyecto")
         
         if not df_gastos.empty:
-            # VISTA 1: LISTA ORDENADA PARA TODOS
             if st.session_state.gasto_a_editar is None:
                 st.write("Historial completo. Solo puedes editar los gastos que tú hayas registrado (✏️).")
                 
@@ -208,7 +209,6 @@ else:
                     c5.write(fila["Pagado_por"])
                     
                     with c6:
-                        # Validación de seguridad visual
                         if fila["Pagado_por"] == st.session_state.usuario_actual:
                             if st.button("✏️", key=f"btn_{fila['ID']}"):
                                 st.session_state.gasto_a_editar = fila["ID"]
@@ -216,12 +216,10 @@ else:
                         else:
                             st.write("🔒")
 
-            # VISTA 2: FORMULARIO DE EDICIÓN (SOLO PARA EL CREADOR)
             else:
                 id_seleccionado = st.session_state.gasto_a_editar
                 fila_actual = df_gastos[df_gastos["ID"] == id_seleccionado].iloc[0]
                 
-                # Segunda validación de seguridad (por si alguien fuerza el estado)
                 if fila_actual["Pagado_por"] != st.session_state.usuario_actual:
                     st.error("No tienes permisos para editar este gasto.")
                     if st.button("🔙 Volver"):
@@ -244,6 +242,8 @@ else:
                         col1, col2 = st.columns(2)
                         idx_moneda = ["UYU", "USD"].index(fila_actual["Moneda"]) if fila_actual["Moneda"] in ["UYU", "USD"] else 0
                         edit_moneda = col1.selectbox("Moneda", ["UYU", "USD"], index=idx_moneda)
+                        
+                        # En la edición sí dejamos el valor actual para que sea fácil corregirlo
                         edit_monto = col2.number_input("Monto", min_value=0.0, value=float(fila_actual["Monto_Original"]), format="%.2f")
                         
                         edit_tasa = 1.0
