@@ -39,10 +39,8 @@ def load_users():
 def load_data():
     if os.path.exists(DATA_FILE):
         df = pd.read_csv(DATA_FILE)
-        # Retrocompatibilidad para IDs
         if "ID" not in df.columns:
             df["ID"] = [uuid.uuid4().hex for _ in range(len(df))]
-        # Retrocompatibilidad para la bandera de Admin
         if "Modificado_por_Admin" not in df.columns:
             df["Modificado_por_Admin"] = False
         save_data(df, DATA_FILE)
@@ -101,6 +99,7 @@ if not st.session_state.logueado:
         submit_login = st.form_submit_button("Entrar")
         
         if submit_login:
+            # Comparamos asegurando que todo sea texto para evitar errores
             user_match = usuarios_df[(usuarios_df["Usuario"] == usuario) & (usuarios_df["Clave"].astype(str) == str(clave))]
             if not user_match.empty:
                 st.session_state.logueado = True
@@ -198,10 +197,11 @@ else:
     elif menu == "Registrar Transferencia":
         st.header("💸 Rendición y Transferencias")
         
-        lista_usuarios = [u for u in usuarios_df["Usuario"].tolist() if u != "admin"]
+        # Filtramos al admin (ignorando mayúsculas) para que no participe en las deudas
+        lista_usuarios = [u for u in usuarios_df["Usuario"].tolist() if str(u).lower().strip() != "admin"]
         
         if len(lista_usuarios) < 2:
-            st.warning("Debes tener al menos 2 usuarios (sin contar admin) para hacer transferencias.")
+            st.warning("Debes tener al menos 2 usuarios reales creados para hacer transferencias.")
         else:
             with st.form("form_transferencia", clear_on_submit=True):
                 fecha = st.date_input("Fecha de transferencia", datetime.date.today())
@@ -252,7 +252,7 @@ else:
                         save_data(df_transfers, TRANSFERS_FILE)
                         st.success(f"¡Transferencia registrada! {origen} envió a {destino} un equivalente de ${monto_uyu:,.2f} UYU.")
 
-    # --- MÓDULO 3: LISTADO DE GASTOS (DISEÑO MÓVIL Y PERMISOS ADMIN) ---
+    # --- MÓDULO 3: LISTADO DE GASTOS ---
     elif menu == "Listado de Gastos":
         st.header("📋 Historial del Proyecto")
         
@@ -263,12 +263,17 @@ else:
                 
                 df_ordenado = df_gastos.sort_values(by="Fecha", ascending=False)
                 
+                # Evaluamos si la sesión actual es admin (robusto a mayúsculas/minúsculas)
+                es_admin = str(st.session_state.usuario_actual).strip().lower() == "admin"
+                
                 for _, fila in df_ordenado.iterrows():
-                    icono_socio = "🟢" if fila["Pagado_por"] == st.session_state.usuario_actual else "🔵"
+                    # Evaluamos si la sesión actual es el dueño del gasto
+                    es_dueno = str(fila["Pagado_por"]).strip().lower() == str(st.session_state.usuario_actual).strip().lower()
+                    
+                    icono_socio = "🟢" if es_dueno else "🔵"
                     titulo_tarjeta = f"{icono_socio} {fila['Fecha']} | {fila['Concepto']} | ${fila['Monto_Original']:,.2f} {fila['Moneda']}"
                     
                     with st.expander(titulo_tarjeta):
-                        # AVISO DE MODIFICACIÓN POR ADMIN
                         if fila.get("Modificado_por_Admin", False):
                             st.warning("⚠️ **Atención:** Este registro fue modificado posteriormente por el Administrador.")
 
@@ -281,10 +286,7 @@ else:
                         else:
                             st.write("📄 **Comprobante:** Falta adjuntar")
                         
-                        # VERIFICACIÓN DE PERMISOS: Es el dueño del gasto O es el admin
-                        es_dueno = fila["Pagado_por"] == st.session_state.usuario_actual
-                        es_admin = st.session_state.usuario_actual == "admin"
-                        
+                        # Mostramos el botón si es su propio gasto O si es el administrador
                         if es_dueno or es_admin:
                             if st.button("✏️ Editar este gasto", key=f"btn_edit_{fila['ID']}"):
                                 st.session_state.gasto_a_editar = fila["ID"]
@@ -297,9 +299,8 @@ else:
                 id_seleccionado = st.session_state.gasto_a_editar
                 fila_actual = df_gastos[df_gastos["ID"] == id_seleccionado].iloc[0]
                 
-                # Segunda validación de seguridad
-                es_dueno = fila_actual["Pagado_por"] == st.session_state.usuario_actual
-                es_admin = st.session_state.usuario_actual == "admin"
+                es_admin = str(st.session_state.usuario_actual).strip().lower() == "admin"
+                es_dueno = str(fila_actual["Pagado_por"]).strip().lower() == str(st.session_state.usuario_actual).strip().lower()
 
                 if not (es_dueno or es_admin):
                     st.error("No tienes permisos para editar este gasto.")
@@ -314,7 +315,7 @@ else:
                     st.markdown("---")
                     st.subheader(f"Editando: {fila_actual['Concepto']}")
                     if es_admin and not es_dueno:
-                        st.warning("Estás editando este gasto con privilegios de Administrador. Se dejará constancia de ello.")
+                        st.warning("Estás editando este gasto con privilegios de Administrador. Se dejará constancia de ello en el registro.")
                     
                     with st.form("form_edicion"):
                         fecha_obj = datetime.datetime.strptime(str(fila_actual["Fecha"]), "%Y-%m-%d").date() if isinstance(fila_actual["Fecha"], str) else fila_actual["Fecha"]
@@ -342,7 +343,7 @@ else:
                             if str(edit_fecha) != str(fila_actual["Fecha"]): cambios_log.append("Fecha")
                             if edit_concepto != fila_actual["Concepto"]: cambios_log.append("Concepto")
                             if edit_moneda != fila_actual["Moneda"]: cambios_log.append("Moneda")
-                            if edit_monto != fila_actual["Monto_Original"]: cambios_log.append("Monto")
+                            if float(edit_monto) != float(fila_actual["Monto_Original"]): cambios_log.append("Monto")
                             if edit_categoria != fila_actual["Categoria"]: cambios_log.append("Categoría")
                             
                             nombre_archivo_final = fila_actual["Archivo_Adjunto"]
@@ -366,7 +367,6 @@ else:
                                 df_gastos.at[idx_general, "Categoria"] = edit_categoria
                                 df_gastos.at[idx_general, "Archivo_Adjunto"] = nombre_archivo_final
                                 
-                                # Si el admin está modificando un gasto que no es suyo, encendemos la bandera
                                 if es_admin and not es_dueno:
                                     df_gastos.at[idx_general, "Modificado_por_Admin"] = True
                                 
@@ -384,7 +384,8 @@ else:
     elif menu == "Balance General":
         st.header("⚖️ Balance de Cuentas (Base UYU)")
         
-        usuarios_socios = [u for u in usuarios_df["Usuario"].tolist() if u != "admin"]
+        # Filtramos al admin (robusto a mayúsculas/minúsculas)
+        usuarios_socios = [u for u in usuarios_df["Usuario"].tolist() if str(u).lower().strip() != "admin"]
         if len(usuarios_socios) < 2:
             st.warning("⚠️ Ve a 'Gestionar Usuarios' y crea al menos 2 cuentas para ver el balance.")
         else:
