@@ -9,10 +9,10 @@ import uuid
 # --- CONFIGURACIÓN INICIAL ---
 st.set_page_config(page_title="Casa La Serena", page_icon="🏡", layout="wide", initial_sidebar_state="collapsed")
 
-# --- MAGIA CSS: DISEÑO UI/UX MODERNO ---
+# --- MAGIA CSS: DISEÑO UI/UX MINIMALISTA Y ALINEADO ---
 st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&display=swap');
     
     html, body, [class*="css"] {
         font-family: 'Inter', sans-serif;
@@ -25,26 +25,34 @@ st.markdown("""
     
     .block-container {
         padding-top: 1rem;
-        max-width: 800px; /* Ancho máximo para que parezca app móvil incluso en PC */
+        max-width: 800px; 
     }
 
-    /* Estilo del Tab Bar (Menú Superior) */
+    /* Estilo del Tab Bar (Menú Superior Deslizable) */
     div.stRadio > div[role="radiogroup"] {
         background-color: #F3F4F6;
-        padding: 5px;
+        padding: 6px;
         border-radius: 12px;
         display: flex;
-        justify-content: space-between;
-        flex-wrap: wrap;
+        flex-wrap: nowrap; /* Obliga a que estén en una sola línea */
+        overflow-x: auto;  /* Permite deslizar hacia los lados en celular */
+        -webkit-overflow-scrolling: touch; /* Deslizamiento suave en iOS */
+        scrollbar-width: none; /* Oculta barra de scroll en Firefox */
         gap: 5px;
+    }
+    div.stRadio > div[role="radiogroup"]::-webkit-scrollbar {
+        display: none; /* Oculta barra de scroll en Chrome/Safari */
     }
     div.stRadio > div[role="radiogroup"] > label {
         background-color: transparent;
-        padding: 8px 12px;
+        padding: 8px 16px;
         border-radius: 8px;
-        flex: 1;
         text-align: center;
+        white-space: nowrap; /* Evita que el texto se parta en dos líneas */
+        font-weight: 500;
+        font-size: 0.95rem;
         transition: all 0.2s ease;
+        cursor: pointer;
     }
     div.stRadio > div[role="radiogroup"] > label[data-checked="true"] {
         background-color: #FFFFFF;
@@ -79,7 +87,7 @@ st.markdown("""
         margin-bottom: 10px;
     }
     
-    /* Tarjetas Custom para KPIs (HTML inyectado) */
+    /* Tarjetas Custom para KPIs */
     .kpi-card-blue {
         background: linear-gradient(135deg, #1E3A8A, #3B82F6);
         color: white;
@@ -105,7 +113,7 @@ st.markdown("""
         box-shadow: 0 2px 5px rgba(0,0,0,0.05);
         margin-bottom: 10px;
     }
-    .kpi-title { font-size: 0.9rem; opacity: 0.9; margin-bottom: 5px; font-weight: 400; }
+    .kpi-title { font-size: 0.9rem; opacity: 0.9; margin-bottom: 5px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
     .kpi-value { font-size: 2rem; font-weight: 800; margin: 0; line-height: 1.2;}
     .kpi-subtitle { font-size: 0.8rem; opacity: 0.7; margin-top: 5px;}
     
@@ -200,15 +208,15 @@ usuarios_df = load_users()
 
 # --- PANTALLA DE LOGIN ---
 if not st.session_state.logueado:
-    st.markdown("<h1 style='text-align: center; color: #1E3A8A; font-weight: 800; margin-bottom: 0;'>🏡 La Serena</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #6B7280; margin-bottom: 30px;'>Gestión y Contabilidad 50/50</p>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; color: #1E3A8A; font-weight: 800; margin-bottom: 0;'>La Serena</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #6B7280; margin-bottom: 30px;'>Gestión y Contabilidad del Proyecto</p>", unsafe_allow_html=True)
     
     with st.container():
         with st.form("login_form"):
             usuario = st.text_input("Usuario")
             clave = st.text_input("Contraseña", type="password")
             st.markdown("<br>", unsafe_allow_html=True)
-            submit_login = st.form_submit_button("Ingresar Seguro", type="primary", use_container_width=True)
+            submit_login = st.form_submit_button("Ingresar", type="primary", use_container_width=True)
             
             if submit_login:
                 user_match = usuarios_df[(usuarios_df["Usuario"] == usuario) & (usuarios_df["Clave"].astype(str) == str(clave))]
@@ -221,33 +229,32 @@ if not st.session_state.logueado:
 
 # --- APLICACIÓN PRINCIPAL ---
 else:
-    # --- MENÚ LATERAL (Solo para ajustes rápidos) ---
-    st.sidebar.title("🏡 La Serena")
-    st.sidebar.write(f"👤 Conectado como: **{st.session_state.usuario_actual}**")
-    if st.sidebar.button("🚪 Cerrar Sesión", use_container_width=True):
+    # --- MENÚ LATERAL ---
+    st.sidebar.title("La Serena")
+    st.sidebar.write(f"Usuario activo: **{st.session_state.usuario_actual}**")
+    if st.sidebar.button("Cerrar Sesión", use_container_width=True):
         st.session_state.logueado = False
         st.session_state.usuario_actual = ""
         st.session_state.gasto_a_editar = None
         st.rerun()
         
     # --- MENÚ SUPERIOR DE NAVEGACIÓN ---
-    opciones_menu = ["📊 Dashboard", "📝 Gasto", "💸 Transf.", "📋 Historial", "⚖️ Balance"]
+    opciones_menu = ["Dashboard", "Gastos", "Transferencias", "Historial", "Balance"]
     
-    # Si es admin, le agregamos la pestaña de usuarios
     if st.session_state.usuario_actual.lower() == "admin":
-        opciones_menu.append("👥 Admin")
+        opciones_menu.append("Admin")
     
     menu = st.radio("Navegación", opciones_menu, horizontal=True, label_visibility="collapsed")
     st.markdown("<br>", unsafe_allow_html=True)
 
-    if menu != "📋 Historial":
+    if menu != "Historial":
         st.session_state.gasto_a_editar = None
 
     df_gastos = load_data()
     df_transfers = load_transfers()
 
     # --- MÓDULO 1: DASHBOARD ---
-    if menu == "📊 Dashboard":
+    if menu == "Dashboard":
         if not df_gastos.empty:
             df_dash = df_gastos.copy()
             df_dash['Fecha'] = pd.to_datetime(df_dash['Fecha'])
@@ -255,23 +262,22 @@ else:
             total_invertido = df_dash["Monto_UYU"].sum()
             total_gastos = len(df_dash)
             
-            # Tarjeta Premium HTML Inyectada
             st.markdown(f"""
                 <div class="kpi-card-blue">
-                    <div class="kpi-title">INVERSIÓN TOTAL EN LA OBRA</div>
+                    <div class="kpi-title">Inversión Total</div>
                     <div class="kpi-value">${total_invertido:,.0f} <span style="font-size: 1rem; font-weight: 400;">UYU</span></div>
                     <div class="kpi-subtitle">Basado en {total_gastos} comprobantes registrados.</div>
                 </div>
             """, unsafe_allow_html=True)
             
-            st.markdown("### 📈 Distribución del Presupuesto")
+            st.markdown("### Distribución del Presupuesto")
             gastos_cat = df_dash.groupby("Categoria")["Monto_UYU"].sum().reset_index()
             fig_pie = px.pie(gastos_cat, values='Monto_UYU', names='Categoria', hole=0.5, 
                              color_discrete_sequence=px.colors.qualitative.Pastel)
             fig_pie.update_layout(margin=dict(t=0, b=0, l=0, r=0), showlegend=True)
             st.plotly_chart(fig_pie, use_container_width=True, config={'displayModeBar': False})
             
-            st.markdown("### 🗓️ Ritmo de Gastos")
+            st.markdown("### Ritmo de Gastos")
             gastos_fecha = df_dash.groupby("Fecha")["Monto_UYU"].sum().reset_index()
             gastos_fecha = gastos_fecha.sort_values("Fecha")
             gastos_fecha["Gasto_Acumulado"] = gastos_fecha["Monto_UYU"].cumsum()
@@ -280,11 +286,11 @@ else:
             fig_line.update_layout(margin=dict(t=10, b=0, l=0, r=0), xaxis_title="", yaxis_title="Monto (UYU)")
             st.plotly_chart(fig_line, use_container_width=True, config={'displayModeBar': False})
         else:
-            st.info("👋 ¡Bienvenido! Registra tu primer gasto para ver los indicadores de la obra.")
+            st.info("Bienvenido. Registra tu primer gasto para ver los indicadores de la obra.")
 
     # --- MÓDULO 2: REGISTRAR GASTO ---
-    elif menu == "📝 Gasto":
-        st.markdown("### 🛒 Registrar Compra o Pago")
+    elif menu == "Gastos":
+        st.markdown("### Registrar Compra o Pago")
         
         with st.container():
             fecha = st.date_input("Fecha", datetime.date.today())
@@ -297,7 +303,7 @@ else:
             tasa_cambio = 1.0
             if moneda == "USD":
                 tasa_sugerida = obtener_tasa_usd_uyu()
-                st.caption(f"ℹ️ Cotización referencial automática: ${tasa_sugerida}")
+                st.caption(f"Cotización referencial automática: ${tasa_sugerida}")
                 tasa_cambio = st.number_input("Tasa de cambio a aplicar", min_value=1.0, value=float(tasa_sugerida), format="%.2f")
             
             lista_usuarios = usuarios_df["Usuario"].tolist()
@@ -307,7 +313,7 @@ else:
             categoria = st.selectbox("Categoría contable", ["Materiales", "Mano de Obra", "Trámites/Permisos", "Terreno", "Otros"])
             
             st.markdown("<br>", unsafe_allow_html=True)
-            archivo_adjunto = st.file_uploader("📸 Adjuntar Factura/Boleta", type=["pdf", "png", "jpg", "jpeg"])
+            archivo_adjunto = st.file_uploader("Adjuntar Factura/Boleta", type=["pdf", "png", "jpg", "jpeg"])
             
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("Guardar Gasto", type="primary", use_container_width=True):
@@ -342,11 +348,11 @@ else:
                     
                     df_gastos = pd.concat([df_gastos, nuevo_dato], ignore_index=True)
                     save_data(df_gastos, DATA_FILE)
-                    st.toast(f"¡Gasto de ${monto_uyu:,.0f} guardado con éxito!", icon="✅")
+                    st.toast(f"Gasto de ${monto_uyu:,.0f} guardado con éxito", icon="✅")
 
     # --- MÓDULO 3: TRANSFERENCIAS ---
-    elif menu == "💸 Transf.":
-        st.markdown("### 💸 Rendición y Giros")
+    elif menu == "Transferencias":
+        st.markdown("### Rendición y Giros")
         
         lista_usuarios = [u for u in usuarios_df["Usuario"].tolist() if str(u).lower().strip() != "admin"]
         
@@ -370,7 +376,7 @@ else:
             if moneda == "USD":
                 tasa_cambio = st.number_input("Tasa de cambio", min_value=1.0, value=float(obtener_tasa_usd_uyu()), format="%.2f")
 
-            archivo_adjunto = st.file_uploader("📸 Comprobante bancario", type=["pdf", "png", "jpg", "jpeg"])
+            archivo_adjunto = st.file_uploader("Comprobante bancario", type=["pdf", "png", "jpg", "jpeg"])
             
             st.markdown("<br>", unsafe_allow_html=True)
             if st.button("Registrar Transferencia", type="primary", use_container_width=True):
@@ -400,11 +406,11 @@ else:
                     
                     df_transfers = pd.concat([df_transfers, nuevo_dato], ignore_index=True)
                     save_data(df_transfers, TRANSFERS_FILE)
-                    st.toast(f"¡Transferencia a {destino} guardada!", icon="✅")
+                    st.toast(f"Transferencia a {destino} guardada", icon="✅")
 
     # --- MÓDULO 4: HISTORIAL ---
-    elif menu == "📋 Historial":
-        st.markdown("### 📋 Libro Mayor")
+    elif menu == "Historial":
+        st.markdown("### Libro Mayor")
         
         if not df_gastos.empty:
             if st.session_state.gasto_a_editar is None:
@@ -413,13 +419,13 @@ else:
                 
                 for _, fila in df_ordenado.iterrows():
                     es_dueno = str(fila["Pagado_por"]).strip().lower() == str(st.session_state.usuario_actual).strip().lower()
-                    icono = "💳" if es_dueno else "🧾"
                     
-                    titulo_tarjeta = f"{icono} **{fila['Concepto']}** —  ${fila['Monto_Original']:,.2f} {fila['Moneda']}"
+                    # Eliminamos los emojis también del historial para mantener la sobriedad
+                    titulo_tarjeta = f"{fila['Fecha']} | {fila['Concepto']} | ${fila['Monto_Original']:,.2f} {fila['Moneda']}"
                     
                     with st.expander(titulo_tarjeta):
                         if fila.get("Modificado_por_Admin", False):
-                            st.caption("⚠️ *Aviso: Modificado por Administrador*")
+                            st.caption("Aviso: Modificado por Administrador")
 
                         st.markdown(f"""
                         <div style="font-size: 0.9rem; color: #4B5563;">
@@ -436,16 +442,17 @@ else:
                             if os.path.exists(ruta_img) and ruta_img.lower().endswith(('.png', '.jpg', '.jpeg')):
                                 st.image(ruta_img, use_container_width=True)
                             else:
-                                st.write(f"📎 **Documento adjunto:** {fila['Archivo_Adjunto']}")
+                                st.write(f"Documento adjunto: {fila['Archivo_Adjunto']}")
                         else:
-                            st.caption("📄 *No hay comprobantes adjuntos*")
+                            st.caption("No hay comprobantes adjuntos")
                         
+                        st.markdown("<br>", unsafe_allow_html=True)
                         if es_dueno or es_admin:
-                            if st.button("✏️ Editar", key=f"btn_edit_{fila['ID']}", use_container_width=True):
+                            if st.button("Editar", key=f"btn_edit_{fila['ID']}", use_container_width=True):
                                 st.session_state.gasto_a_editar = fila["ID"]
                                 st.rerun()
                         else:
-                            st.caption("🔒 Solo el dueño o el Administrador pueden editar.")
+                            st.caption("Solo el dueño o el Administrador pueden editar este registro.")
 
             # VISTA DE EDICIÓN
             else:
@@ -455,13 +462,13 @@ else:
                 es_admin = str(st.session_state.usuario_actual).strip().lower() == "admin"
                 es_dueno = str(fila_actual["Pagado_por"]).strip().lower() == str(st.session_state.usuario_actual).strip().lower()
 
-                if st.button("🔙 Volver", use_container_width=True):
+                if st.button("Volver al historial", use_container_width=True):
                     st.session_state.gasto_a_editar = None
                     st.rerun()
                 
-                st.markdown(f"### ✏️ Editando: {fila_actual['Concepto']}")
+                st.markdown(f"### Editando: {fila_actual['Concepto']}")
                 if es_admin and not es_dueno:
-                    st.warning("⚠️ Modo Admin: Quedará registro de esta modificación externa.")
+                    st.warning("Modo Admin: Quedará registro de esta modificación externa.")
                 
                 with st.container():
                     fecha_obj = datetime.datetime.strptime(str(fila_actual["Fecha"]), "%Y-%m-%d").date() if isinstance(fila_actual["Fecha"], str) else fila_actual["Fecha"]
@@ -481,13 +488,13 @@ else:
                     idx_cat = categorias.index(fila_actual["Categoria"]) if fila_actual["Categoria"] in categorias else 0
                     edit_categoria = st.selectbox("Categoría", categorias, index=idx_cat)
                     
-                    st.write(f"📁 Documento actual: **{fila_actual['Archivo_Adjunto']}**")
+                    st.write(f"Documento actual: **{fila_actual['Archivo_Adjunto']}**")
                     nuevo_archivo = st.file_uploader("Reemplazar foto", type=["pdf", "png", "jpg", "jpeg"])
                     
                     st.markdown("<br>", unsafe_allow_html=True)
                     col_save, col_del = st.columns(2)
                     
-                    if col_save.button("💾 Guardar", type="primary", use_container_width=True):
+                    if col_save.button("Guardar", type="primary", use_container_width=True):
                         cambios_log = []
                         if str(edit_fecha) != str(fila_actual["Fecha"]): cambios_log.append("Fecha")
                         if edit_concepto != fila_actual["Concepto"]: cambios_log.append("Concepto")
@@ -521,27 +528,27 @@ else:
                         save_data(df_gastos, DATA_FILE)
                         registrar_log(id_seleccionado, st.session_state.usuario_actual, f"Editado: {','.join(cambios_log)}")
                         
-                        st.toast("¡Cambios guardados!", icon="✅")
+                        st.toast("Modificaciones guardadas exitosamente", icon="✅")
                         st.session_state.gasto_a_editar = None
                         st.rerun()
 
-                    if col_del.button("🗑️ Eliminar", use_container_width=True):
+                    if col_del.button("Eliminar", use_container_width=True):
                         df_gastos = df_gastos[df_gastos["ID"] != id_seleccionado]
                         save_data(df_gastos, DATA_FILE)
                         registrar_log(id_seleccionado, st.session_state.usuario_actual, "ELIMINADO COMPLETAMENTE")
-                        st.toast("Registro eliminado definitivamente.", icon="🗑️")
+                        st.toast("Registro eliminado definitivamente", icon="🗑️")
                         st.session_state.gasto_a_editar = None
                         st.rerun()
         else:
             st.info("Aún no hay movimientos en el libro mayor.")
 
     # --- MÓDULO 5: BALANCE 50/50 ---
-    elif menu == "⚖️ Balance":
-        st.markdown("### ⚖️ Balance 50/50")
+    elif menu == "Balance":
+        st.markdown("### Estado de Cuentas")
         
         usuarios_socios = [u for u in usuarios_df["Usuario"].tolist() if str(u).lower().strip() != "admin"]
         if len(usuarios_socios) < 2:
-            st.info("⚠️ Crea al menos 2 cuentas de socios para ver el cálculo matemático.")
+            st.info("Crea al menos 2 cuentas de socios para ver el cálculo matemático.")
         else:
             usuario_1 = usuarios_socios[0]
             usuario_2 = usuarios_socios[1]
@@ -562,10 +569,9 @@ else:
             
             diferencia = abs(saldo_1 - meta_individual)
 
-            # Tarjeta de Veredicto Principal (Diseño Custom HTML)
             if diferencia < 1: 
                 color_card = "kpi-card-green"
-                titulo_alerta = "¡CUENTAS CLARAS!"
+                titulo_alerta = "CUENTAS CLARAS"
                 mensaje_alerta = "Ambos socios están al día. Nadie debe dinero."
             elif saldo_1 > meta_individual:
                 color_card = "kpi-card-blue"
@@ -583,12 +589,11 @@ else:
                 </div>
             """, unsafe_allow_html=True)
             
-            # Tarjetas individuales de resumen
             col1, col2 = st.columns(2)
             with col1:
                 st.markdown(f"""
                     <div class="kpi-card-white">
-                        <div style="color:#2563EB; font-weight:800; font-size:1.1rem; margin-bottom:10px;">👤 {usuario_1}</div>
+                        <div style="color:#2563EB; font-weight:800; font-size:1.1rem; margin-bottom:10px;">{usuario_1}</div>
                         <div style="font-size: 0.9rem; color: #4B5563;">
                             Gastos en Obra: <b style="float:right;">${gastos_1:,.0f}</b><br>
                             Girado: <span style="float:right; color:#10B981;">+${enviado_1:,.0f}</span><br>
@@ -602,7 +607,7 @@ else:
             with col2:
                 st.markdown(f"""
                     <div class="kpi-card-white">
-                        <div style="color:#2563EB; font-weight:800; font-size:1.1rem; margin-bottom:10px;">👤 {usuario_2}</div>
+                        <div style="color:#2563EB; font-weight:800; font-size:1.1rem; margin-bottom:10px;">{usuario_2}</div>
                         <div style="font-size: 0.9rem; color: #4B5563;">
                             Gastos en Obra: <b style="float:right;">${gastos_2:,.0f}</b><br>
                             Girado: <span style="float:right; color:#10B981;">+${enviado_2:,.0f}</span><br>
@@ -614,12 +619,12 @@ else:
                 """, unsafe_allow_html=True)
 
     # --- MÓDULO 6: ADMIN (USUARIOS) ---
-    elif menu == "👥 Admin":
-        st.header("👥 Gestión Interna")
+    elif menu == "Admin":
+        st.markdown("### Gestión Interna")
         st.dataframe(usuarios_df[["Usuario"]], use_container_width=True)
         
         st.markdown("---")
-        st.subheader("Registrar Socio")
+        st.markdown("#### Registrar Socio")
         with st.container():
             nuevo_nombre = st.text_input("Nombre de Usuario")
             nueva_clave = st.text_input("Contraseña", type="password")
@@ -631,5 +636,5 @@ else:
                     nuevo_usr = pd.DataFrame([{"Usuario": nuevo_nombre, "Clave": nueva_clave}])
                     usuarios_df = pd.concat([usuarios_df, nuevo_usr], ignore_index=True)
                     save_data(usuarios_df, USERS_FILE)
-                    st.toast(f"Usuario '{nuevo_nombre}' habilitado.", icon="✅")
+                    st.toast(f"Usuario '{nuevo_nombre}' habilitado", icon="✅")
                     st.rerun()
