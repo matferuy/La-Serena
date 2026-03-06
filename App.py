@@ -328,7 +328,7 @@ else:
 
                 st.markdown("---")
                 
-                # Gráfico de Evolución Apilado por Categoría (ARRASTRANDO VALORES)
+                # Gráfico de Evolución Apilado por Categoría (ARRASTRANDO VALORES Y SIN HORAS)
                 st.markdown("#### 📈 Evolución del gasto por tipo")
                 
                 fechas_unicas = df_dash["Fecha"].dropna().unique()
@@ -342,7 +342,13 @@ else:
                 gastos_evolucion["Gasto_Acumulado"] = gastos_evolucion.groupby("Categoria")["Monto_UYU"].cumsum()
                 
                 fig_area = px.area(gastos_evolucion, x='Fecha', y='Gasto_Acumulado', color='Categoria', color_discrete_sequence=px.colors.qualitative.Pastel)
+                
+                # Ajuste de layout general
                 fig_area.update_layout(margin=dict(t=10, b=10, l=0, r=0), xaxis_title="", yaxis_title="Acumulado (UYU)", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", legend=dict(orientation="h", yanchor="bottom", y=-0.5, xanchor="center", x=0.5, title_text=""))
+                
+                # Ocultar las horas en el eje horizontal y en la etiqueta al pasar el ratón/dedo
+                fig_area.update_xaxes(tickformat="%d/%m/%Y", hoverformat="%d/%m/%Y")
+                
                 st.plotly_chart(fig_area, use_container_width=True, config={'displayModeBar': False})
             else:
                 st.info("Sin registros aún.")
