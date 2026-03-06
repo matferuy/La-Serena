@@ -502,7 +502,13 @@ else:
 
             with subtab1:
                 if not df_gastos.empty:
+                    # FORZAR CONVERSIÓN A FECHA ANTES DE ORDENAR
+                    df_gastos["Fecha"] = pd.to_datetime(df_gastos["Fecha"])
                     df_gastos_ord = df_gastos.sort_values(by="Fecha", ascending=False)
+                    
+                    # Para la visualización, volver a convertir a texto si lo deseas (opcional, pero se ve más limpio)
+                    df_gastos_ord["Fecha"] = df_gastos_ord["Fecha"].dt.strftime('%Y-%m-%d')
+                    
                     for _, fila in df_gastos_ord.iterrows():
                         es_dueno = str(fila["Pagado_por"]).strip().lower() == str(st.session_state.usuario_actual).strip().lower()
                         titulo = f"{fila['Fecha']} | {fila['Concepto']} | ${fila['Monto_Original']:,.2f} {fila['Moneda']}"
@@ -518,7 +524,13 @@ else:
 
             with subtab2:
                 if not df_transfers.empty:
+                    # FORZAR CONVERSIÓN A FECHA ANTES DE ORDENAR
+                    df_transfers["Fecha"] = pd.to_datetime(df_transfers["Fecha"])
                     df_transf_ord = df_transfers.sort_values(by="Fecha", ascending=False)
+                    
+                    # Formato limpio para mostrar
+                    df_transf_ord["Fecha"] = df_transf_ord["Fecha"].dt.strftime('%Y-%m-%d')
+                    
                     for _, fila in df_transf_ord.iterrows():
                         es_dueno = str(fila["Origen"]).strip().lower() == str(st.session_state.usuario_actual).strip().lower()
                         titulo = f"{fila['Fecha']} | {fila['Origen']} ➡️ {fila['Destino']} | ${fila['Monto_Original']:,.2f} {fila['Moneda']}"
@@ -531,6 +543,7 @@ else:
                                     st.rerun()
                 else:
                     st.info("No hay transferencias registradas.")
+
 
     # --- PESTAÑA 5: BALANCE ---
     with tabs[4]:
