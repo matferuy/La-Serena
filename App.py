@@ -147,7 +147,7 @@ else:
         tasa_cambio = 1.0
         if moneda == "USD":
             tasa_sugerida = obtener_tasa_usd_uyu()
-            st.info("🌐 Tipo de cambio interbancario referencial obtenido automáticamente.")
+            st.info("🌐 Tipo de cambio referencial obtenido automáticamente.")
             tasa_cambio = st.number_input("Tasa de cambio a aplicar", min_value=1.0, value=float(tasa_sugerida), format="%.2f")
         
         lista_usuarios = usuarios_df["Usuario"].tolist()
@@ -189,10 +189,9 @@ else:
                 save_data(df_gastos, DATA_FILE)
                 st.success(f"¡Gasto registrado con éxito! Equivalente: **${monto_uyu:,.2f} UYU**")
 
-    # --- MÓDULO NUEVO: REGISTRAR TRANSFERENCIA ---
+    # --- MÓDULO 2: REGISTRAR TRANSFERENCIA ---
     elif menu == "Registrar Transferencia":
         st.header("💸 Rendición y Transferencias")
-        st.write("Registra aquí cuando un socio le envía dinero al otro para equilibrar las cuentas.")
         
         lista_usuarios = [u for u in usuarios_df["Usuario"].tolist() if u != "admin"]
         
@@ -203,16 +202,14 @@ else:
                 fecha = st.date_input("Fecha de transferencia", datetime.date.today())
                 
                 col1, col2 = st.columns(2)
-                # Quien envía
                 idx_origen = lista_usuarios.index(st.session_state.usuario_actual) if st.session_state.usuario_actual in lista_usuarios else 0
                 origen = col1.selectbox("¿Quién envía el dinero?", lista_usuarios, index=idx_origen)
                 
-                # Quien recibe (sugerimos automáticamente al otro socio)
                 opciones_destino = [u for u in lista_usuarios if u != origen]
                 destino = col2.selectbox("¿Quién lo recibe?", opciones_destino)
                 
                 col_m1, col_m2 = st.columns(2)
-                moneda = col_m1.selectbox("Moneda de la transferencia", ["UYU", "USD"])
+                moneda = col_m1.selectbox("Moneda", ["UYU", "USD"])
                 monto = col_m2.number_input(f"Monto a transferir", min_value=0.0, value=None, placeholder="Ej: 500", format="%.2f")
                 
                 tasa_cambio = 1.0
@@ -250,41 +247,43 @@ else:
                         save_data(df_transfers, TRANSFERS_FILE)
                         st.success(f"¡Transferencia registrada! {origen} envió a {destino} un equivalente de ${monto_uyu:,.2f} UYU.")
 
-    # --- MÓDULO 2: LISTADO DE GASTOS ---
+    # --- MÓDULO 3: LISTADO DE GASTOS (DISEÑO MÓVIL) ---
     elif menu == "Listado de Gastos":
         st.header("📋 Historial del Proyecto")
         
         if not df_gastos.empty:
+            # VISTA 1: LISTA PARA CELULARES (Acordeón)
             if st.session_state.gasto_a_editar is None:
-                st.write("Historial completo. Solo puedes editar los gastos que tú hayas registrado (✏️).")
+                st.write("Toca un gasto para ver los detalles, el comprobante o editarlo.")
+                st.markdown("---")
                 
                 df_ordenado = df_gastos.sort_values(by="Fecha", ascending=False)
                 
-                col1, col2, col3, col4, col5, col6 = st.columns([2, 3, 2, 1, 2, 1])
-                col1.markdown("**Fecha**")
-                col2.markdown("**Concepto**")
-                col3.markdown("**Monto**")
-                col4.markdown("**Moneda**")
-                col5.markdown("**Socio**")
-                col6.markdown("**Acción**")
-                st.markdown("---")
-                
                 for _, fila in df_ordenado.iterrows():
-                    c1, c2, c3, c4, c5, c6 = st.columns([2, 3, 2, 1, 2, 1])
-                    c1.write(fila["Fecha"])
-                    c2.write(fila["Concepto"])
-                    c3.write(f"${fila['Monto_Original']:,.2f}")
-                    c4.write(fila["Moneda"])
-                    c5.write(fila["Pagado_por"])
+                    # Título de la tarjeta (siempre visible)
+                    icono_socio = "🟢" if fila["Pagado_por"] == st.session_state.usuario_actual else "🔵"
+                    titulo_tarjeta = f"{icono_socio} {fila['Fecha']} | {fila['Concepto']} | ${fila['Monto_Original']:,.2f} {fila['Moneda']}"
                     
-                    with c6:
+                    # Contenido desplegable
+                    with st.expander(titulo_tarjeta):
+                        st.write(f"**Pagado por:** {fila['Pagado_por']}")
+                        st.write(f"**Categoría:** {fila['Categoria']}")
+                        st.write(f"**Costo en Pesos:** ${fila['Monto_UYU']:,.2f} UYU")
+                        
+                        if fila['Archivo_Adjunto'] != "Sin adjunto":
+                            st.write(f"📎 **Comprobante:** Adjuntado ({fila['Archivo_Adjunto']})")
+                        else:
+                            st.write("📄 **Comprobante:** Falta adjuntar")
+                        
+                        # Botón de edición o aviso de candado
                         if fila["Pagado_por"] == st.session_state.usuario_actual:
-                            if st.button("✏️", key=f"btn_{fila['ID']}"):
+                            if st.button("✏️ Editar este gasto", key=f"btn_edit_{fila['ID']}"):
                                 st.session_state.gasto_a_editar = fila["ID"]
                                 st.rerun()
                         else:
-                            st.write("🔒")
+                            st.info("🔒 Registrado por tu socio. Solo él puede editarlo.")
 
+            # VISTA 2: FORMULARIO DE EDICIÓN
             else:
                 id_seleccionado = st.session_state.gasto_a_editar
                 fila_actual = df_gastos[df_gastos["ID"] == id_seleccionado].iloc[0]
@@ -295,7 +294,7 @@ else:
                         st.session_state.gasto_a_editar = None
                         st.rerun()
                 else:
-                    if st.button("🔙 Volver a la lista de gastos"):
+                    if st.button("🔙 Volver a la lista"):
                         st.session_state.gasto_a_editar = None
                         st.rerun()
                     
@@ -361,7 +360,7 @@ else:
         else:
             st.info("Aún no hay gastos registrados en el proyecto.")
 
-    # --- MÓDULO 3: BALANCE 50/50 ---
+    # --- MÓDULO 4: BALANCE 50/50 ---
     elif menu == "Balance General":
         st.header("⚖️ Balance de Cuentas (Base UYU)")
         
@@ -372,85 +371,72 @@ else:
             usuario_1 = usuarios_socios[0]
             usuario_2 = usuarios_socios[1]
             
-            # 1. Calculamos Gastos Reales
             gastos_1 = df_gastos[df_gastos["Pagado_por"] == usuario_1]["Monto_UYU"].sum() if not df_gastos.empty else 0.0
             gastos_2 = df_gastos[df_gastos["Pagado_por"] == usuario_2]["Monto_UYU"].sum() if not df_gastos.empty else 0.0
             total_proyecto = gastos_1 + gastos_2
             meta_individual = total_proyecto / 2
             
-            # 2. Calculamos Transferencias
             enviado_1 = df_transfers[df_transfers["Origen"] == usuario_1]["Monto_UYU"].sum() if not df_transfers.empty else 0.0
             recibido_1 = df_transfers[df_transfers["Destino"] == usuario_1]["Monto_UYU"].sum() if not df_transfers.empty else 0.0
             
             enviado_2 = df_transfers[df_transfers["Origen"] == usuario_2]["Monto_UYU"].sum() if not df_transfers.empty else 0.0
             recibido_2 = df_transfers[df_transfers["Destino"] == usuario_2]["Monto_UYU"].sum() if not df_transfers.empty else 0.0
             
-            # 3. Calculamos Saldo Contable Real (Lo que realmente salió de sus bolsillos en total)
             saldo_1 = gastos_1 + enviado_1 - recibido_1
             saldo_2 = gastos_2 + enviado_2 - recibido_2
             
-            # Presentación visual clara
-            st.subheader(f"Costo total del proyecto a la fecha: **${total_proyecto:,.2f} UYU**")
+            st.subheader(f"Costo total del proyecto: **${total_proyecto:,.2f} UYU**")
             st.write(f"*(Cada socio debería aportar $ {meta_individual:,.2f} UYU)*")
             st.markdown("---")
             
             col1, col2 = st.columns(2)
             with col1:
                 st.markdown(f"### 👤 {usuario_1}")
-                st.write(f"**Pagó en gastos:** ${gastos_1:,.2f}")
-                st.write(f"**Transfirió a {usuario_2}:** + ${enviado_1:,.2f}")
-                st.write(f"**Recibió de {usuario_2}:** - ${recibido_1:,.2f}")
-                st.info(f"**Aporte Neto al Proyecto:** ${saldo_1:,.2f}")
+                st.write(f"**Gastos pagados:** ${gastos_1:,.2f}")
+                st.write(f"**Enviado:** + ${enviado_1:,.2f}")
+                st.write(f"**Recibido:** - ${recibido_1:,.2f}")
+                st.info(f"**Aporte Neto:** ${saldo_1:,.2f}")
                 
             with col2:
                 st.markdown(f"### 👤 {usuario_2}")
-                st.write(f"**Pagó en gastos:** ${gastos_2:,.2f}")
-                st.write(f"**Transfirió a {usuario_1}:** + ${enviado_2:,.2f}")
-                st.write(f"**Recibió de {usuario_1}:** - ${recibido_2:,.2f}")
-                st.info(f"**Aporte Neto al Proyecto:** ${saldo_2:,.2f}")
+                st.write(f"**Gastos pagados:** ${gastos_2:,.2f}")
+                st.write(f"**Enviado:** + ${enviado_2:,.2f}")
+                st.write(f"**Recibido:** - ${recibido_2:,.2f}")
+                st.info(f"**Aporte Neto:** ${saldo_2:,.2f}")
             
             st.markdown("---")
-            st.subheader("💡 Estado Final de Cuentas (50/50):")
+            st.subheader("💡 Estado Final de Cuentas:")
             
             diferencia = abs(saldo_1 - meta_individual)
             
-            # Para evitar mostrar $0.01 por errores de redondeo de la computadora
             if diferencia < 1: 
                 st.success("🎉 ¡Están perfectamente al día! Nadie le debe a nadie.")
             elif saldo_1 > meta_individual:
                 st.error(f"👉 **{usuario_2}** debe transferir a **{usuario_1}**: **${diferencia:,.2f} UYU**")
             else:
                 st.error(f"👉 **{usuario_1}** debe transferir a **{usuario_2}**: **${diferencia:,.2f} UYU**")
-                
-            if not df_transfers.empty:
-                st.markdown("---")
-                st.write("📄 **Historial de Transferencias:**")
-                st.dataframe(df_transfers[["Fecha", "Origen", "Destino", "Moneda", "Monto_Original", "Monto_UYU"]], use_container_width=True)
 
-    # --- MÓDULO 4: MONITOREO DE GASTOS ---
+    # --- MÓDULO 5: MONITOREO DE GASTOS ---
     elif menu == "Monitoreo de Gastos":
         st.header("📊 Dashboard de Gastos")
         if not df_gastos.empty:
             df_gastos['Fecha'] = pd.to_datetime(df_gastos['Fecha'])
             
-            col1, col2 = st.columns(2)
-            with col1:
-                st.subheader("Distribución por Categoría")
-                gastos_cat = df_gastos.groupby("Categoria")["Monto_UYU"].sum().reset_index()
-                fig_pie = px.pie(gastos_cat, values='Monto_UYU', names='Categoria', hole=0.4)
-                st.plotly_chart(fig_pie, use_container_width=True)
-                
-            with col2:
-                st.subheader("Evolución del Costo de la Obra")
-                gastos_fecha = df_gastos.groupby("Fecha")["Monto_UYU"].sum().reset_index()
-                gastos_fecha = gastos_fecha.sort_values("Fecha")
-                gastos_fecha["Gasto_Acumulado"] = gastos_fecha["Monto_UYU"].cumsum()
-                fig_line = px.line(gastos_fecha, x='Fecha', y='Gasto_Acumulado', markers=True)
-                st.plotly_chart(fig_line, use_container_width=True)
+            st.subheader("Distribución por Categoría")
+            gastos_cat = df_gastos.groupby("Categoria")["Monto_UYU"].sum().reset_index()
+            fig_pie = px.pie(gastos_cat, values='Monto_UYU', names='Categoria', hole=0.4)
+            st.plotly_chart(fig_pie, use_container_width=True)
+            
+            st.subheader("Evolución del Costo de la Obra")
+            gastos_fecha = df_gastos.groupby("Fecha")["Monto_UYU"].sum().reset_index()
+            gastos_fecha = gastos_fecha.sort_values("Fecha")
+            gastos_fecha["Gasto_Acumulado"] = gastos_fecha["Monto_UYU"].cumsum()
+            fig_line = px.line(gastos_fecha, x='Fecha', y='Gasto_Acumulado', markers=True)
+            st.plotly_chart(fig_line, use_container_width=True)
         else:
             st.info("Registra algunos gastos primero para poder ver los gráficos.")
 
-    # --- MÓDULO 5: GESTIONAR USUARIOS ---
+    # --- MÓDULO 6: GESTIONAR USUARIOS ---
     elif menu == "Gestionar Usuarios":
         st.header("👥 Gestión de Usuarios")
         st.dataframe(usuarios_df[["Usuario"]])
