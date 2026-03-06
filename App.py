@@ -9,7 +9,7 @@ import uuid
 # --- CONFIGURACIÓN INICIAL ---
 st.set_page_config(page_title="Casa La Serena", page_icon="🏡", layout="wide", initial_sidebar_state="collapsed")
 
-# --- MAGIA CSS: DISEÑO UI/UX MINIMALISTA Y ALINEADO ---
+# --- MAGIA CSS: DISEÑO UI/UX MEJORADO (Compatible con iPad/iOS) ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&display=swap');
@@ -28,40 +28,42 @@ st.markdown("""
         max-width: 800px; 
     }
 
-    /* Estilo del Tab Bar (Menú Superior Deslizable) */
+    /* Estilo del Menú Superior (A prueba de iPad/Móvil) */
     div.stRadio > div[role="radiogroup"] {
-        background-color: #F3F4F6;
-        padding: 6px;
-        border-radius: 12px;
         display: flex;
-        flex-wrap: nowrap; /* Obliga a que estén en una sola línea */
-        overflow-x: auto;  /* Permite deslizar hacia los lados en celular */
-        -webkit-overflow-scrolling: touch; /* Deslizamiento suave en iOS */
-        scrollbar-width: none; /* Oculta barra de scroll en Firefox */
-        gap: 5px;
-    }
-    div.stRadio > div[role="radiogroup"]::-webkit-scrollbar {
-        display: none; /* Oculta barra de scroll en Chrome/Safari */
+        flex-wrap: wrap; /* Permite que los botones bajen si no caben */
+        gap: 8px;
+        justify-content: center;
+        margin-bottom: 10px;
     }
     div.stRadio > div[role="radiogroup"] > label {
-        background-color: transparent;
-        padding: 8px 16px;
-        border-radius: 8px;
-        text-align: center;
-        white-space: nowrap; /* Evita que el texto se parta en dos líneas */
-        font-weight: 500;
-        font-size: 0.95rem;
-        transition: all 0.2s ease;
+        background-color: #F3F4F6;
+        padding: 10px 15px;
+        border-radius: 10px;
         cursor: pointer;
+        border: 1px solid transparent;
+        transition: all 0.2s;
+    }
+    div.stRadio > div[role="radiogroup"] > label:hover {
+        background-color: #E5E7EB;
     }
     div.stRadio > div[role="radiogroup"] > label[data-checked="true"] {
-        background-color: #FFFFFF;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-        color: #2563EB !important;
+        background-color: #2563EB;
+        border-color: #1D4ED8;
+        box-shadow: 0 4px 6px rgba(37, 99, 235, 0.2);
+    }
+    /* Forzar el color del texto interno del botón */
+    div.stRadio > div[role="radiogroup"] > label p {
+        color: #4B5563;
         font-weight: 600;
+        margin: 0;
+        font-size: 0.95rem;
+    }
+    div.stRadio > div[role="radiogroup"] > label[data-checked="true"] p {
+        color: #FFFFFF !important;
     }
 
-    /* Estilo de Botones */
+    /* Estilo de Botones Principales */
     .stButton>button {
         border-radius: 10px;
         font-weight: 600;
@@ -71,11 +73,7 @@ st.markdown("""
     .stButton>button[kind="primary"] {
         background: linear-gradient(135deg, #2563EB, #1D4ED8);
         border: none;
-        box-shadow: 0 4px 6px rgba(37, 99, 235, 0.2);
-    }
-    .stButton>button[kind="primary"]:hover {
-        box-shadow: 0 6px 8px rgba(37, 99, 235, 0.3);
-        transform: translateY(-1px);
+        color: white;
     }
 
     /* Tarjetas del Historial (Expanders) */
@@ -113,14 +111,9 @@ st.markdown("""
         box-shadow: 0 2px 5px rgba(0,0,0,0.05);
         margin-bottom: 10px;
     }
-    .kpi-title { font-size: 0.9rem; opacity: 0.9; margin-bottom: 5px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+    .kpi-title { font-size: 0.9rem; opacity: 0.9; margin-bottom: 5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
     .kpi-value { font-size: 2rem; font-weight: 800; margin: 0; line-height: 1.2;}
     .kpi-subtitle { font-size: 0.8rem; opacity: 0.7; margin-top: 5px;}
-    
-    /* Inputs */
-    div[data-baseweb="input"], div[data-baseweb="select"] {
-        border-radius: 8px;
-    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -171,23 +164,29 @@ def load_data():
 
 def load_transfers():
     if os.path.exists(TRANSFERS_FILE):
-        return pd.read_csv(TRANSFERS_FILE)
+        df = pd.read_csv(TRANSFERS_FILE)
+        if "ID" not in df.columns:
+            df["ID"] = [uuid.uuid4().hex for _ in range(len(df))]
+        if "Modificado_por_Admin" not in df.columns:
+            df["Modificado_por_Admin"] = False
+        save_data(df, TRANSFERS_FILE)
+        return df
     else:
         return pd.DataFrame(columns=[
-            "ID", "Fecha", "Origen", "Destino", "Moneda", "Monto_Original", "Tasa_Cambio", "Monto_UYU", "Archivo_Adjunto"
+            "ID", "Fecha", "Origen", "Destino", "Moneda", "Monto_Original", "Tasa_Cambio", "Monto_UYU", "Archivo_Adjunto", "Modificado_por_Admin"
         ])
 
 def load_logs():
     if os.path.exists(LOG_FILE):
         return pd.read_csv(LOG_FILE)
     else:
-        return pd.DataFrame(columns=["Timestamp", "ID_Gasto", "Usuario", "Detalle_Cambios"])
+        return pd.DataFrame(columns=["Timestamp", "ID_Registro", "Usuario", "Detalle_Cambios"])
 
-def registrar_log(id_gasto, usuario, detalle):
+def registrar_log(id_registro, usuario, detalle):
     logs_df = load_logs()
     nuevo_log = pd.DataFrame([{
         "Timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "ID_Gasto": id_gasto,
+        "ID_Registro": id_registro,
         "Usuario": usuario,
         "Detalle_Cambios": detalle
     }])
@@ -203,6 +202,8 @@ if "logueado" not in st.session_state:
     st.session_state.usuario_actual = ""
 if "gasto_a_editar" not in st.session_state:
     st.session_state.gasto_a_editar = None
+if "transfer_a_editar" not in st.session_state:
+    st.session_state.transfer_a_editar = None
 
 usuarios_df = load_users()
 
@@ -231,11 +232,12 @@ if not st.session_state.logueado:
 else:
     # --- MENÚ LATERAL ---
     st.sidebar.title("La Serena")
-    st.sidebar.write(f"Usuario activo: **{st.session_state.usuario_actual}**")
-    if st.sidebar.button("Cerrar Sesión", use_container_width=True):
+    st.sidebar.write(f"👤 Conectado: **{st.session_state.usuario_actual}**")
+    if st.sidebar.button("🚪 Cerrar Sesión", use_container_width=True):
         st.session_state.logueado = False
         st.session_state.usuario_actual = ""
         st.session_state.gasto_a_editar = None
+        st.session_state.transfer_a_editar = None
         st.rerun()
         
     # --- MENÚ SUPERIOR DE NAVEGACIÓN ---
@@ -247,8 +249,10 @@ else:
     menu = st.radio("Navegación", opciones_menu, horizontal=True, label_visibility="collapsed")
     st.markdown("<br>", unsafe_allow_html=True)
 
+    # Limpiar estados si no estamos en la pestaña Historial
     if menu != "Historial":
         st.session_state.gasto_a_editar = None
+        st.session_state.transfer_a_editar = None
 
     df_gastos = load_data()
     df_transfers = load_transfers()
@@ -326,7 +330,7 @@ else:
                     nombre_archivo = "Sin adjunto"
                     
                     if archivo_adjunto is not None:
-                        nombre_archivo = f"{fecha}_{archivo_adjunto.name}"
+                        nombre_archivo = f"GASTO_{fecha}_{archivo_adjunto.name}"
                         ruta_guardado = os.path.join(DIR_COMPROBANTES, nombre_archivo)
                         with open(ruta_guardado, "wb") as f:
                             f.write(archivo_adjunto.getbuffer())
@@ -401,146 +405,279 @@ else:
                         "Monto_Original": monto, 
                         "Tasa_Cambio": tasa_cambio, 
                         "Monto_UYU": monto_uyu, 
-                        "Archivo_Adjunto": nombre_archivo
+                        "Archivo_Adjunto": nombre_archivo,
+                        "Modificado_por_Admin": False
                     }])
                     
                     df_transfers = pd.concat([df_transfers, nuevo_dato], ignore_index=True)
                     save_data(df_transfers, TRANSFERS_FILE)
                     st.toast(f"Transferencia a {destino} guardada", icon="✅")
 
-    # --- MÓDULO 4: HISTORIAL ---
+    # --- MÓDULO 4: HISTORIAL (GASTOS Y TRANSFERENCIAS EDITABLES) ---
     elif menu == "Historial":
-        st.markdown("### Libro Mayor")
         
-        if not df_gastos.empty:
-            if st.session_state.gasto_a_editar is None:
-                df_ordenado = df_gastos.sort_values(by="Fecha", ascending=False)
-                es_admin = str(st.session_state.usuario_actual).strip().lower() == "admin"
-                
-                for _, fila in df_ordenado.iterrows():
-                    es_dueno = str(fila["Pagado_por"]).strip().lower() == str(st.session_state.usuario_actual).strip().lower()
-                    
-                    # Eliminamos los emojis también del historial para mantener la sobriedad
-                    titulo_tarjeta = f"{fila['Fecha']} | {fila['Concepto']} | ${fila['Monto_Original']:,.2f} {fila['Moneda']}"
-                    
-                    with st.expander(titulo_tarjeta):
-                        if fila.get("Modificado_por_Admin", False):
-                            st.caption("Aviso: Modificado por Administrador")
+        # Flujo 1: No estamos editando nada, mostramos las listas
+        if st.session_state.gasto_a_editar is None y st.session_state.transfer_a_editar is None:
+            st.markdown("### Libro Mayor")
+            
+            # Pestañas nativas de Streamlit para separar Gastos de Transferencias
+            tab1, tab2 = st.tabs(["🛒 Lista de Gastos", "💸 Lista de Transferencias"])
+            es_admin = str(st.session_state.usuario_actual).strip().lower() == "admin"
 
-                        st.markdown(f"""
-                        <div style="font-size: 0.9rem; color: #4B5563;">
-                            <b>Fecha:</b> {fila['Fecha']}<br>
-                            <b>Socio:</b> {fila['Pagado_por']}<br>
-                            <b>Categoría:</b> {fila['Categoria']}<br>
-                            <b>Impacto Balance:</b> ${fila['Monto_UYU']:,.2f} UYU
-                        </div>
-                        """, unsafe_allow_html=True)
-                        st.markdown("<br>", unsafe_allow_html=True)
+            # --- SUB-PESTAÑA GASTOS ---
+            with tab1:
+                if not df_gastos.empty:
+                    df_gastos_ord = df_gastos.sort_values(by="Fecha", ascending=False)
+                    for _, fila in df_gastos_ord.iterrows():
+                        es_dueno = str(fila["Pagado_por"]).strip().lower() == str(st.session_state.usuario_actual).strip().lower()
+                        titulo = f"{fila['Fecha']} | {fila['Concepto']} | ${fila['Monto_Original']:,.2f} {fila['Moneda']}"
                         
-                        if fila['Archivo_Adjunto'] != "Sin adjunto":
-                            ruta_img = os.path.join(DIR_COMPROBANTES, fila['Archivo_Adjunto'])
-                            if os.path.exists(ruta_img) and ruta_img.lower().endswith(('.png', '.jpg', '.jpeg')):
-                                st.image(ruta_img, use_container_width=True)
+                        with st.expander(titulo):
+                            if fila.get("Modificado_por_Admin", False):
+                                st.caption("Aviso: Modificado por Administrador")
+
+                            st.markdown(f"""
+                            <div style="font-size: 0.9rem; color: #4B5563;">
+                                <b>Pagado por:</b> {fila['Pagado_por']}<br>
+                                <b>Categoría:</b> {fila['Categoria']}<br>
+                                <b>Impacto Balance:</b> ${fila['Monto_UYU']:,.2f} UYU
+                            </div>
+                            """, unsafe_allow_html=True)
+                            st.markdown("<br>", unsafe_allow_html=True)
+                            
+                            if fila['Archivo_Adjunto'] != "Sin adjunto":
+                                ruta_img = os.path.join(DIR_COMPROBANTES, fila['Archivo_Adjunto'])
+                                if os.path.exists(ruta_img) and ruta_img.lower().endswith(('.png', '.jpg', '.jpeg')):
+                                    st.image(ruta_img, use_container_width=True)
+                                else:
+                                    st.write(f"Documento adjunto: {fila['Archivo_Adjunto']}")
                             else:
-                                st.write(f"Documento adjunto: {fila['Archivo_Adjunto']}")
-                        else:
-                            st.caption("No hay comprobantes adjuntos")
+                                st.caption("No hay comprobantes adjuntos")
+                            
+                            st.markdown("<br>", unsafe_allow_html=True)
+                            if es_dueno or es_admin:
+                                if st.button("Editar Gasto", key=f"btn_edit_g_{fila['ID']}", use_container_width=True):
+                                    st.session_state.gasto_a_editar = fila["ID"]
+                                    st.rerun()
+                            else:
+                                st.caption("Solo el dueño o el Administrador pueden editar este registro.")
+                else:
+                    st.info("No hay gastos registrados.")
+
+            # --- SUB-PESTAÑA TRANSFERENCIAS ---
+            with tab2:
+                if not df_transfers.empty:
+                    df_transf_ord = df_transfers.sort_values(by="Fecha", ascending=False)
+                    for _, fila in df_transf_ord.iterrows():
+                        es_dueno = str(fila["Origen"]).strip().lower() == str(st.session_state.usuario_actual).strip().lower()
+                        titulo = f"{fila['Fecha']} | {fila['Origen']} ➡️ {fila['Destino']} | ${fila['Monto_Original']:,.2f} {fila['Moneda']}"
                         
-                        st.markdown("<br>", unsafe_allow_html=True)
-                        if es_dueno or es_admin:
-                            if st.button("Editar", key=f"btn_edit_{fila['ID']}", use_container_width=True):
-                                st.session_state.gasto_a_editar = fila["ID"]
-                                st.rerun()
-                        else:
-                            st.caption("Solo el dueño o el Administrador pueden editar este registro.")
+                        with st.expander(titulo):
+                            if fila.get("Modificado_por_Admin", False):
+                                st.caption("Aviso: Modificado por Administrador")
 
-            # VISTA DE EDICIÓN
-            else:
-                id_seleccionado = st.session_state.gasto_a_editar
-                fila_actual = df_gastos[df_gastos["ID"] == id_seleccionado].iloc[0]
+                            st.markdown(f"""
+                            <div style="font-size: 0.9rem; color: #4B5563;">
+                                <b>Impacto Balance:</b> ${fila['Monto_UYU']:,.2f} UYU
+                            </div>
+                            """, unsafe_allow_html=True)
+                            st.markdown("<br>", unsafe_allow_html=True)
+                            
+                            if fila['Archivo_Adjunto'] != "Sin adjunto":
+                                ruta_img = os.path.join(DIR_COMPROBANTES, fila['Archivo_Adjunto'])
+                                if os.path.exists(ruta_img) and ruta_img.lower().endswith(('.png', '.jpg', '.jpeg')):
+                                    st.image(ruta_img, use_container_width=True)
+                                else:
+                                    st.write(f"Documento adjunto: {fila['Archivo_Adjunto']}")
+                            else:
+                                st.caption("No hay comprobantes adjuntos")
+                            
+                            st.markdown("<br>", unsafe_allow_html=True)
+                            if es_dueno or es_admin:
+                                if st.button("Editar Transferencia", key=f"btn_edit_t_{fila['ID']}", use_container_width=True):
+                                    st.session_state.transfer_a_editar = fila["ID"]
+                                    st.rerun()
+                            else:
+                                st.caption("Solo el emisor o el Administrador pueden editar este registro.")
+                else:
+                    st.info("No hay transferencias registradas.")
+
+        # Flujo 2: ESTAMOS EDITANDO UN GASTO
+        elif st.session_state.gasto_a_editar is not None:
+            id_seleccionado = st.session_state.gasto_a_editar
+            fila_actual = df_gastos[df_gastos["ID"] == id_seleccionado].iloc[0]
+            
+            es_admin = str(st.session_state.usuario_actual).strip().lower() == "admin"
+            es_dueno = str(fila_actual["Pagado_por"]).strip().lower() == str(st.session_state.usuario_actual).strip().lower()
+
+            if st.button("Volver al historial", use_container_width=True):
+                st.session_state.gasto_a_editar = None
+                st.rerun()
+            
+            st.markdown(f"### Editando Gasto: {fila_actual['Concepto']}")
+            if es_admin and not es_dueno:
+                st.warning("Modo Admin: Quedará registro de esta modificación externa.")
+            
+            with st.container():
+                fecha_obj = datetime.datetime.strptime(str(fila_actual["Fecha"]), "%Y-%m-%d").date() if isinstance(fila_actual["Fecha"], str) else fila_actual["Fecha"]
+                edit_fecha = st.date_input("Fecha", fecha_obj)
+                edit_concepto = st.text_input("Concepto", fila_actual["Concepto"])
                 
-                es_admin = str(st.session_state.usuario_actual).strip().lower() == "admin"
-                es_dueno = str(fila_actual["Pagado_por"]).strip().lower() == str(st.session_state.usuario_actual).strip().lower()
+                col1, col2 = st.columns(2)
+                idx_moneda = ["UYU", "USD"].index(fila_actual["Moneda"]) if fila_actual["Moneda"] in ["UYU", "USD"] else 0
+                edit_moneda = col1.selectbox("Moneda", ["UYU", "USD"], index=idx_moneda)
+                edit_monto = col2.number_input("Monto", min_value=0.0, value=float(fila_actual["Monto_Original"]), format="%.2f")
+                
+                edit_tasa = 1.0
+                if edit_moneda == "USD":
+                    edit_tasa = st.number_input("Tasa aplicada", min_value=1.0, value=float(fila_actual["Tasa_Cambio"]), format="%.2f")
+                
+                categorias = ["Materiales", "Mano de Obra", "Trámites/Permisos", "Terreno", "Otros"]
+                idx_cat = categorias.index(fila_actual["Categoria"]) if fila_actual["Categoria"] in categorias else 0
+                edit_categoria = st.selectbox("Categoría", categorias, index=idx_cat)
+                
+                st.write(f"Documento actual: **{fila_actual['Archivo_Adjunto']}**")
+                nuevo_archivo = st.file_uploader("Reemplazar foto", type=["pdf", "png", "jpg", "jpeg"])
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                col_save, col_del = st.columns(2)
+                
+                if col_save.button("Guardar Cambios", type="primary", use_container_width=True):
+                    cambios_log = []
+                    if str(edit_fecha) != str(fila_actual["Fecha"]): cambios_log.append("Fecha")
+                    if edit_concepto != fila_actual["Concepto"]: cambios_log.append("Concepto")
+                    if edit_moneda != fila_actual["Moneda"]: cambios_log.append("Moneda")
+                    if float(edit_monto) != float(fila_actual["Monto_Original"]): cambios_log.append("Monto")
+                    if edit_categoria != fila_actual["Categoria"]: cambios_log.append("Categoría")
+                    
+                    nombre_archivo_final = fila_actual["Archivo_Adjunto"]
+                    if nuevo_archivo is not None:
+                        nombre_archivo_final = f"GASTO_{edit_fecha}_{nuevo_archivo.name}"
+                        ruta_guardado = os.path.join(DIR_COMPROBANTES, nombre_archivo_final)
+                        with open(ruta_guardado, "wb") as f:
+                            f.write(nuevo_archivo.getbuffer())
+                        cambios_log.append("Archivo adjuntado")
 
-                if st.button("Volver al historial", use_container_width=True):
+                    nuevo_monto_uyu = edit_monto * edit_tasa
+                    idx_general = df_gastos[df_gastos["ID"] == id_seleccionado].index[0]
+                    
+                    df_gastos.at[idx_general, "Fecha"] = edit_fecha
+                    df_gastos.at[idx_general, "Concepto"] = edit_concepto
+                    df_gastos.at[idx_general, "Moneda"] = edit_moneda
+                    df_gastos.at[idx_general, "Monto_Original"] = edit_monto
+                    df_gastos.at[idx_general, "Tasa_Cambio"] = edit_tasa
+                    df_gastos.at[idx_general, "Monto_UYU"] = nuevo_monto_uyu
+                    df_gastos.at[idx_general, "Categoria"] = edit_categoria
+                    df_gastos.at[idx_general, "Archivo_Adjunto"] = nombre_archivo_final
+                    
+                    if es_admin and not es_dueno:
+                        df_gastos.at[idx_general, "Modificado_por_Admin"] = True
+                    
+                    save_data(df_gastos, DATA_FILE)
+                    registrar_log(id_seleccionado, st.session_state.usuario_actual, f"Editado: {','.join(cambios_log)}")
+                    
+                    st.toast("Modificaciones guardadas exitosamente", icon="✅")
                     st.session_state.gasto_a_editar = None
                     st.rerun()
-                
-                st.markdown(f"### Editando: {fila_actual['Concepto']}")
-                if es_admin and not es_dueno:
-                    st.warning("Modo Admin: Quedará registro de esta modificación externa.")
-                
-                with st.container():
-                    fecha_obj = datetime.datetime.strptime(str(fila_actual["Fecha"]), "%Y-%m-%d").date() if isinstance(fila_actual["Fecha"], str) else fila_actual["Fecha"]
-                    edit_fecha = st.date_input("Fecha", fecha_obj)
-                    edit_concepto = st.text_input("Concepto", fila_actual["Concepto"])
-                    
-                    col1, col2 = st.columns(2)
-                    idx_moneda = ["UYU", "USD"].index(fila_actual["Moneda"]) if fila_actual["Moneda"] in ["UYU", "USD"] else 0
-                    edit_moneda = col1.selectbox("Moneda", ["UYU", "USD"], index=idx_moneda)
-                    edit_monto = col2.number_input("Monto", min_value=0.0, value=float(fila_actual["Monto_Original"]), format="%.2f")
-                    
-                    edit_tasa = 1.0
-                    if edit_moneda == "USD":
-                        edit_tasa = st.number_input("Tasa aplicada", min_value=1.0, value=float(fila_actual["Tasa_Cambio"]), format="%.2f")
-                    
-                    categorias = ["Materiales", "Mano de Obra", "Trámites/Permisos", "Terreno", "Otros"]
-                    idx_cat = categorias.index(fila_actual["Categoria"]) if fila_actual["Categoria"] in categorias else 0
-                    edit_categoria = st.selectbox("Categoría", categorias, index=idx_cat)
-                    
-                    st.write(f"Documento actual: **{fila_actual['Archivo_Adjunto']}**")
-                    nuevo_archivo = st.file_uploader("Reemplazar foto", type=["pdf", "png", "jpg", "jpeg"])
-                    
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    col_save, col_del = st.columns(2)
-                    
-                    if col_save.button("Guardar", type="primary", use_container_width=True):
-                        cambios_log = []
-                        if str(edit_fecha) != str(fila_actual["Fecha"]): cambios_log.append("Fecha")
-                        if edit_concepto != fila_actual["Concepto"]: cambios_log.append("Concepto")
-                        if edit_moneda != fila_actual["Moneda"]: cambios_log.append("Moneda")
-                        if float(edit_monto) != float(fila_actual["Monto_Original"]): cambios_log.append("Monto")
-                        if edit_categoria != fila_actual["Categoria"]: cambios_log.append("Categoría")
-                        
-                        nombre_archivo_final = fila_actual["Archivo_Adjunto"]
-                        if nuevo_archivo is not None:
-                            nombre_archivo_final = f"{edit_fecha}_{nuevo_archivo.name}"
-                            ruta_guardado = os.path.join(DIR_COMPROBANTES, nombre_archivo_final)
-                            with open(ruta_guardado, "wb") as f:
-                                f.write(nuevo_archivo.getbuffer())
-                            cambios_log.append("Archivo adjuntado")
 
-                        nuevo_monto_uyu = edit_monto * edit_tasa
-                        idx_general = df_gastos[df_gastos["ID"] == id_seleccionado].index[0]
-                        
-                        df_gastos.at[idx_general, "Fecha"] = edit_fecha
-                        df_gastos.at[idx_general, "Concepto"] = edit_concepto
-                        df_gastos.at[idx_general, "Moneda"] = edit_moneda
-                        df_gastos.at[idx_general, "Monto_Original"] = edit_monto
-                        df_gastos.at[idx_general, "Tasa_Cambio"] = edit_tasa
-                        df_gastos.at[idx_general, "Monto_UYU"] = nuevo_monto_uyu
-                        df_gastos.at[idx_general, "Categoria"] = edit_categoria
-                        df_gastos.at[idx_general, "Archivo_Adjunto"] = nombre_archivo_final
-                        
-                        if es_admin and not es_dueno:
-                            df_gastos.at[idx_general, "Modificado_por_Admin"] = True
-                        
-                        save_data(df_gastos, DATA_FILE)
-                        registrar_log(id_seleccionado, st.session_state.usuario_actual, f"Editado: {','.join(cambios_log)}")
-                        
-                        st.toast("Modificaciones guardadas exitosamente", icon="✅")
-                        st.session_state.gasto_a_editar = None
-                        st.rerun()
+                if col_del.button("Eliminar", use_container_width=True):
+                    df_gastos = df_gastos[df_gastos["ID"] != id_seleccionado]
+                    save_data(df_gastos, DATA_FILE)
+                    registrar_log(id_seleccionado, st.session_state.usuario_actual, "ELIMINADO COMPLETAMENTE")
+                    st.toast("Registro eliminado definitivamente", icon="🗑️")
+                    st.session_state.gasto_a_editar = None
+                    st.rerun()
 
-                    if col_del.button("Eliminar", use_container_width=True):
-                        df_gastos = df_gastos[df_gastos["ID"] != id_seleccionado]
-                        save_data(df_gastos, DATA_FILE)
-                        registrar_log(id_seleccionado, st.session_state.usuario_actual, "ELIMINADO COMPLETAMENTE")
-                        st.toast("Registro eliminado definitivamente", icon="🗑️")
-                        st.session_state.gasto_a_editar = None
-                        st.rerun()
-        else:
-            st.info("Aún no hay movimientos en el libro mayor.")
+        # Flujo 3: ESTAMOS EDITANDO UNA TRANSFERENCIA
+        elif st.session_state.transfer_a_editar is not None:
+            id_seleccionado = st.session_state.transfer_a_editar
+            fila_actual = df_transfers[df_transfers["ID"] == id_seleccionado].iloc[0]
+            
+            es_admin = str(st.session_state.usuario_actual).strip().lower() == "admin"
+            es_dueno = str(fila_actual["Origen"]).strip().lower() == str(st.session_state.usuario_actual).strip().lower()
+
+            if st.button("Volver al historial", use_container_width=True):
+                st.session_state.transfer_a_editar = None
+                st.rerun()
+            
+            st.markdown(f"### Editando Transferencia")
+            if es_admin and not es_dueno:
+                st.warning("Modo Admin: Quedará registro de esta modificación externa.")
+            
+            with st.container():
+                fecha_obj = datetime.datetime.strptime(str(fila_actual["Fecha"]), "%Y-%m-%d").date() if isinstance(fila_actual["Fecha"], str) else fila_actual["Fecha"]
+                edit_fecha = st.date_input("Fecha", fecha_obj)
+                
+                lista_usuarios_clean = [u for u in usuarios_df["Usuario"].tolist() if str(u).lower().strip() != "admin"]
+                
+                col1, col2 = st.columns(2)
+                idx_origen = lista_usuarios_clean.index(fila_actual["Origen"]) if fila_actual["Origen"] in lista_usuarios_clean else 0
+                edit_origen = col1.selectbox("Quién envía", lista_usuarios_clean, index=idx_origen)
+                
+                opciones_destino = [u for u in lista_usuarios_clean if u != edit_origen]
+                idx_destino = opciones_destino.index(fila_actual["Destino"]) if fila_actual["Destino"] in opciones_destino else 0
+                edit_destino = col2.selectbox("Quién recibe", opciones_destino, index=idx_destino)
+                
+                col3, col4 = st.columns(2)
+                idx_moneda = ["UYU", "USD"].index(fila_actual["Moneda"]) if fila_actual["Moneda"] in ["UYU", "USD"] else 0
+                edit_moneda = col3.selectbox("Moneda", ["UYU", "USD"], index=idx_moneda)
+                edit_monto = col4.number_input("Monto", min_value=0.0, value=float(fila_actual["Monto_Original"]), format="%.2f")
+                
+                edit_tasa = 1.0
+                if edit_moneda == "USD":
+                    edit_tasa = st.number_input("Tasa aplicada", min_value=1.0, value=float(fila_actual["Tasa_Cambio"]), format="%.2f")
+                
+                st.write(f"Documento actual: **{fila_actual['Archivo_Adjunto']}**")
+                nuevo_archivo = st.file_uploader("Reemplazar comprobante", type=["pdf", "png", "jpg", "jpeg"])
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+                col_save, col_del = st.columns(2)
+                
+                if col_save.button("Guardar Cambios", type="primary", use_container_width=True):
+                    cambios_log = []
+                    if str(edit_fecha) != str(fila_actual["Fecha"]): cambios_log.append("Fecha")
+                    if edit_origen != fila_actual["Origen"]: cambios_log.append("Origen")
+                    if edit_destino != fila_actual["Destino"]: cambios_log.append("Destino")
+                    if edit_moneda != fila_actual["Moneda"]: cambios_log.append("Moneda")
+                    if float(edit_monto) != float(fila_actual["Monto_Original"]): cambios_log.append("Monto")
+                    
+                    nombre_archivo_final = fila_actual["Archivo_Adjunto"]
+                    if nuevo_archivo is not None:
+                        nombre_archivo_final = f"TRANSF_{edit_fecha}_{nuevo_archivo.name}"
+                        ruta_guardado = os.path.join(DIR_COMPROBANTES, nombre_archivo_final)
+                        with open(ruta_guardado, "wb") as f:
+                            f.write(nuevo_archivo.getbuffer())
+                        cambios_log.append("Archivo adjuntado")
+
+                    nuevo_monto_uyu = edit_monto * edit_tasa
+                    idx_general = df_transfers[df_transfers["ID"] == id_seleccionado].index[0]
+                    
+                    df_transfers.at[idx_general, "Fecha"] = edit_fecha
+                    df_transfers.at[idx_general, "Origen"] = edit_origen
+                    df_transfers.at[idx_general, "Destino"] = edit_destino
+                    df_transfers.at[idx_general, "Moneda"] = edit_moneda
+                    df_transfers.at[idx_general, "Monto_Original"] = edit_monto
+                    df_transfers.at[idx_general, "Tasa_Cambio"] = edit_tasa
+                    df_transfers.at[idx_general, "Monto_UYU"] = nuevo_monto_uyu
+                    df_transfers.at[idx_general, "Archivo_Adjunto"] = nombre_archivo_final
+                    
+                    if es_admin and not es_dueno:
+                        df_transfers.at[idx_general, "Modificado_por_Admin"] = True
+                    
+                    save_data(df_transfers, TRANSFERS_FILE)
+                    registrar_log(id_seleccionado, st.session_state.usuario_actual, f"Transferencia editada: {','.join(cambios_log)}")
+                    
+                    st.toast("Modificaciones guardadas exitosamente", icon="✅")
+                    st.session_state.transfer_a_editar = None
+                    st.rerun()
+
+                if col_del.button("Eliminar", use_container_width=True):
+                    df_transfers = df_transfers[df_transfers["ID"] != id_seleccionado]
+                    save_data(df_transfers, TRANSFERS_FILE)
+                    registrar_log(id_seleccionado, st.session_state.usuario_actual, "TRANSFERENCIA ELIMINADA COMPLETAMENTE")
+                    st.toast("Transferencia eliminada definitivamente", icon="🗑️")
+                    st.session_state.transfer_a_editar = None
+                    st.rerun()
 
     # --- MÓDULO 5: BALANCE 50/50 ---
     elif menu == "Balance":
