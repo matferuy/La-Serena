@@ -39,14 +39,18 @@ def load_users():
 def load_data():
     if os.path.exists(DATA_FILE):
         df = pd.read_csv(DATA_FILE)
+        # Retrocompatibilidad para IDs
         if "ID" not in df.columns:
             df["ID"] = [uuid.uuid4().hex for _ in range(len(df))]
-            save_data(df, DATA_FILE)
+        # Retrocompatibilidad para la bandera de Admin
+        if "Modificado_por_Admin" not in df.columns:
+            df["Modificado_por_Admin"] = False
+        save_data(df, DATA_FILE)
         return df
     else:
         return pd.DataFrame(columns=[
             "ID", "Fecha", "Concepto", "Moneda", "Monto_Original", "Tasa_Cambio", 
-            "Monto_UYU", "Pagado_por", "Categoria", "Archivo_Adjunto"
+            "Monto_UYU", "Pagado_por", "Categoria", "Archivo_Adjunto", "Modificado_por_Admin"
         ])
 
 def load_transfers():
@@ -182,7 +186,8 @@ else:
                     "Monto_UYU": monto_uyu, 
                     "Pagado_por": pagado_por, 
                     "Categoria": categoria,
-                    "Archivo_Adjunto": nombre_archivo
+                    "Archivo_Adjunto": nombre_archivo,
+                    "Modificado_por_Admin": False
                 }])
                 
                 df_gastos = pd.concat([df_gastos, nuevo_dato], ignore_index=True)
@@ -247,12 +252,11 @@ else:
                         save_data(df_transfers, TRANSFERS_FILE)
                         st.success(f"¡Transferencia registrada! {origen} envió a {destino} un equivalente de ${monto_uyu:,.2f} UYU.")
 
-    # --- MÓDULO 3: LISTADO DE GASTOS (DISEÑO MÓVIL) ---
+    # --- MÓDULO 3: LISTADO DE GASTOS (DISEÑO MÓVIL Y PERMISOS ADMIN) ---
     elif menu == "Listado de Gastos":
         st.header("📋 Historial del Proyecto")
         
         if not df_gastos.empty:
-            # VISTA 1: LISTA PARA CELULARES (Acordeón)
             if st.session_state.gasto_a_editar is None:
                 st.write("Toca un gasto para ver los detalles, el comprobante o editarlo.")
                 st.markdown("---")
@@ -260,12 +264,14 @@ else:
                 df_ordenado = df_gastos.sort_values(by="Fecha", ascending=False)
                 
                 for _, fila in df_ordenado.iterrows():
-                    # Título de la tarjeta (siempre visible)
                     icono_socio = "🟢" if fila["Pagado_por"] == st.session_state.usuario_actual else "🔵"
                     titulo_tarjeta = f"{icono_socio} {fila['Fecha']} | {fila['Concepto']} | ${fila['Monto_Original']:,.2f} {fila['Moneda']}"
                     
-                    # Contenido desplegable
                     with st.expander(titulo_tarjeta):
+                        # AVISO DE MODIFICACIÓN POR ADMIN
+                        if fila.get("Modificado_por_Admin", False):
+                            st.warning("⚠️ **Atención:** Este registro fue modificado posteriormente por el Administrador.")
+
                         st.write(f"**Pagado por:** {fila['Pagado_por']}")
                         st.write(f"**Categoría:** {fila['Categoria']}")
                         st.write(f"**Costo en Pesos:** ${fila['Monto_UYU']:,.2f} UYU")
@@ -275,20 +281,27 @@ else:
                         else:
                             st.write("📄 **Comprobante:** Falta adjuntar")
                         
-                        # Botón de edición o aviso de candado
-                        if fila["Pagado_por"] == st.session_state.usuario_actual:
+                        # VERIFICACIÓN DE PERMISOS: Es el dueño del gasto O es el admin
+                        es_dueno = fila["Pagado_por"] == st.session_state.usuario_actual
+                        es_admin = st.session_state.usuario_actual == "admin"
+                        
+                        if es_dueno or es_admin:
                             if st.button("✏️ Editar este gasto", key=f"btn_edit_{fila['ID']}"):
                                 st.session_state.gasto_a_editar = fila["ID"]
                                 st.rerun()
                         else:
-                            st.info("🔒 Registrado por tu socio. Solo él puede editarlo.")
+                            st.info("🔒 Registrado por tu socio. Solo él o el Administrador pueden editarlo.")
 
             # VISTA 2: FORMULARIO DE EDICIÓN
             else:
                 id_seleccionado = st.session_state.gasto_a_editar
                 fila_actual = df_gastos[df_gastos["ID"] == id_seleccionado].iloc[0]
                 
-                if fila_actual["Pagado_por"] != st.session_state.usuario_actual:
+                # Segunda validación de seguridad
+                es_dueno = fila_actual["Pagado_por"] == st.session_state.usuario_actual
+                es_admin = st.session_state.usuario_actual == "admin"
+
+                if not (es_dueno or es_admin):
                     st.error("No tienes permisos para editar este gasto.")
                     if st.button("🔙 Volver"):
                         st.session_state.gasto_a_editar = None
@@ -300,6 +313,8 @@ else:
                     
                     st.markdown("---")
                     st.subheader(f"Editando: {fila_actual['Concepto']}")
+                    if es_admin and not es_dueno:
+                        st.warning("Estás editando este gasto con privilegios de Administrador. Se dejará constancia de ello.")
                     
                     with st.form("form_edicion"):
                         fecha_obj = datetime.datetime.strptime(str(fila_actual["Fecha"]), "%Y-%m-%d").date() if isinstance(fila_actual["Fecha"], str) else fila_actual["Fecha"]
@@ -341,6 +356,7 @@ else:
                             if cambios_log:
                                 nuevo_monto_uyu = edit_monto * edit_tasa
                                 idx_general = df_gastos[df_gastos["ID"] == id_seleccionado].index[0]
+                                
                                 df_gastos.at[idx_general, "Fecha"] = edit_fecha
                                 df_gastos.at[idx_general, "Concepto"] = edit_concepto
                                 df_gastos.at[idx_general, "Moneda"] = edit_moneda
@@ -349,6 +365,10 @@ else:
                                 df_gastos.at[idx_general, "Monto_UYU"] = nuevo_monto_uyu
                                 df_gastos.at[idx_general, "Categoria"] = edit_categoria
                                 df_gastos.at[idx_general, "Archivo_Adjunto"] = nombre_archivo_final
+                                
+                                # Si el admin está modificando un gasto que no es suyo, encendemos la bandera
+                                if es_admin and not es_dueno:
+                                    df_gastos.at[idx_general, "Modificado_por_Admin"] = True
                                 
                                 save_data(df_gastos, DATA_FILE)
                                 registrar_log(id_seleccionado, st.session_state.usuario_actual, f"Editado: {','.join(cambios_log)}")
