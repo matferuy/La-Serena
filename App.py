@@ -100,7 +100,7 @@ usuarios_df = load_users()
 # --- PANTALLA DE LOGIN ---
 if not st.session_state.logueado:
     st.markdown("<h1 style='text-align: center; color: #1E3A8A; font-weight: 800; margin-bottom: 0;'>La Serena</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: var(--text-color); margin-bottom: 30px;'>Gestión y Contabilidad</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: var(--text-color); margin-bottom: 30px;'>Gestión y Contabilidad del Proyecto</p>", unsafe_allow_html=True)
     with st.container():
         with st.form("login_form"):
             usuario = st.text_input("Usuario")
@@ -119,7 +119,7 @@ else:
     df_transfers = load_transfers()
     es_admin = st.session_state.usuario_actual.lower() == "admin"
 
-    # --- CABECERA MÓVIL (Reemplaza el menú lateral) ---
+    # --- CABECERA MÓVIL ---
     col_perfil, col_salir = st.columns([3, 1])
     with col_perfil:
         st.markdown(f"<div style='padding-top: 15px; font-size: 1.1rem;'>👤 <b>{st.session_state.usuario_actual}</b></div>", unsafe_allow_html=True)
@@ -127,11 +127,13 @@ else:
         if st.button("🚪 Salir", use_container_width=True):
             st.session_state.logueado = False
             st.session_state.modo_registro = None
+            st.session_state.gasto_a_editar = None
+            st.session_state.transfer_a_editar = None
             st.rerun()
 
     st.markdown("<hr style='margin: 5px 0px 15px 0px;'>", unsafe_allow_html=True)
 
-    # --- BOTÓN DE ACCIÓN PRINCIPAL TIPO DROPDOWN ("+") ---
+    # --- BOTÓN DESPLEGABLE DE NUEVO REGISTRO ("+") ---
     if st.session_state.modo_registro is None and st.session_state.gasto_a_editar is None and st.session_state.transfer_a_editar is None:
         with st.expander("➕ NUEVO REGISTRO", expanded=False):
             col_btn_g, col_btn_t = st.columns(2)
@@ -163,6 +165,7 @@ else:
             categoria = st.selectbox("Categoría", ["Materiales", "Mano de Obra", "Trámites/Permisos", "Terreno", "Otros"])
             archivo_adjunto = st.file_uploader("Adjuntar Factura/Boleta", type=["pdf", "png", "jpg", "jpeg"])
             
+            st.markdown("<br>", unsafe_allow_html=True)
             col_save, col_cancel = st.columns(2)
             if col_save.button("Guardar", type="primary", use_container_width=True):
                 if monto and concepto:
@@ -204,18 +207,12 @@ else:
             if moneda_transf == "USD":
                 tasa_cambio_transf = st.number_input("Tasa de cambio", min_value=1.0, value=float(obtener_tasa_usd_uyu()), format="%.2f")
 
-            archivo_adjunto_transf = st.file_uploader("Comprobante bancario", type=["pdf", "png", "jpg", "jpeg"])
-            
+            st.markdown("<br>", unsafe_allow_html=True)
             col_save, col_cancel = st.columns(2)
             if col_save.button("Registrar", type="primary", use_container_width=True):
                 if monto_transf:
                     monto_uyu_transf = monto_transf * tasa_cambio_transf
-                    nombre_archivo_transf = "Sin adjunto"
-                    if archivo_adjunto_transf:
-                        nombre_archivo_transf = f"TRANSF_{fecha_transf}_{archivo_adjunto_transf.name}"
-                        with open(os.path.join(DIR_COMPROBANTES, nombre_archivo_transf), "wb") as f: f.write(archivo_adjunto_transf.getbuffer())
-                    
-                    nuevo_dato_transf = pd.DataFrame([{"ID": uuid.uuid4().hex, "Fecha": fecha_transf, "Origen": origen, "Destino": destino, "Moneda": moneda_transf, "Monto_Original": monto_transf, "Tasa_Cambio": tasa_cambio_transf, "Monto_UYU": monto_uyu_transf, "Archivo_Adjunto": nombre_archivo_transf, "Modificado_por_Admin": False}])
+                    nuevo_dato_transf = pd.DataFrame([{"ID": uuid.uuid4().hex, "Fecha": fecha_transf, "Origen": origen, "Destino": destino, "Moneda": moneda_transf, "Monto_Original": monto_transf, "Tasa_Cambio": tasa_cambio_transf, "Monto_UYU": monto_uyu_transf, "Archivo_Adjunto": "Sin adjunto", "Modificado_por_Admin": False}])
                     save_data(pd.concat([df_transfers, nuevo_dato_transf], ignore_index=True), TRANSFERS_FILE)
                     st.session_state.modo_registro = None
                     st.rerun()
@@ -225,7 +222,78 @@ else:
                 st.rerun()
 
     # =========================================================
-    # VISTA 3: PESTAÑAS PRINCIPALES (VISTA NORMAL)
+    # VISTA 3: PANTALLA DE EDICIÓN DE GASTOS (OVERLAY PANTALLA COMPLETA)
+    # =========================================================
+    elif st.session_state.gasto_a_editar is not None:
+        id_seleccionado = st.session_state.gasto_a_editar
+        fila_actual = df_gastos[df_gastos["ID"] == id_seleccionado].iloc[0]
+        
+        st.markdown(f"### ✏️ Editando: {fila_actual['Concepto']}")
+        
+        with st.container():
+            fecha_obj = pd.to_datetime(fila_actual["Fecha"]).date()
+            edit_fecha = st.date_input("Fecha", fecha_obj)
+            edit_concepto = st.text_input("Concepto", fila_actual["Concepto"])
+            
+            col1, col2 = st.columns(2)
+            idx_moneda = ["UYU", "USD"].index(fila_actual["Moneda"]) if fila_actual["Moneda"] in ["UYU", "USD"] else 0
+            edit_moneda = col1.selectbox("Moneda", ["UYU", "USD"], index=idx_moneda)
+            edit_monto = col2.number_input("Monto Original", min_value=0.0, value=float(fila_actual["Monto_Original"]), format="%.2f")
+            
+            edit_tasa = float(fila_actual["Tasa_Cambio"])
+            if edit_moneda == "USD":
+                edit_tasa = st.number_input("Tasa aplicada", min_value=1.0, value=float(fila_actual["Tasa_Cambio"]), format="%.2f")
+            
+            categorias = ["Materiales", "Mano de Obra", "Trámites/Permisos", "Terreno", "Otros"]
+            idx_cat = categorias.index(fila_actual["Categoria"]) if fila_actual["Categoria"] in categorias else 0
+            edit_categoria = st.selectbox("Categoría", categorias, index=idx_cat)
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            col_save, col_del, col_cancel = st.columns(3)
+            
+            if col_save.button("Guardar", type="primary", use_container_width=True):
+                idx_general = df_gastos[df_gastos["ID"] == id_seleccionado].index[0]
+                df_gastos.at[idx_general, "Fecha"] = edit_fecha
+                df_gastos.at[idx_general, "Concepto"] = edit_concepto
+                df_gastos.at[idx_general, "Moneda"] = edit_moneda
+                df_gastos.at[idx_general, "Monto_Original"] = edit_monto
+                df_gastos.at[idx_general, "Tasa_Cambio"] = edit_tasa
+                df_gastos.at[idx_general, "Monto_UYU"] = edit_monto * edit_tasa
+                df_gastos.at[idx_general, "Categoria"] = edit_categoria
+                save_data(df_gastos, DATA_FILE)
+                st.session_state.gasto_a_editar = None
+                st.rerun()
+
+            if col_del.button("🗑️ Eliminar", use_container_width=True):
+                df_gastos = df_gastos[df_gastos["ID"] != id_seleccionado]
+                save_data(df_gastos, DATA_FILE)
+                st.session_state.gasto_a_editar = None
+                st.rerun()
+                
+            if col_cancel.button("Cancelar", use_container_width=True):
+                st.session_state.gasto_a_editar = None
+                st.rerun()
+
+    # =========================================================
+    # VISTA 4: PANTALLA DE EDICIÓN DE TRANSFERENCIAS (OVERLAY)
+    # =========================================================
+    elif st.session_state.transfer_a_editar is not None:
+        id_transf = st.session_state.transfer_a_editar
+        st.markdown("### ✏️ Gestionar Transferencia")
+        st.warning("Para modificar montos u origen/destino, elimina este registro y crea uno nuevo.")
+        
+        col_del, col_cancel = st.columns(2)
+        if col_del.button("🗑️ Eliminar Transferencia", type="primary", use_container_width=True):
+            df_transfers = df_transfers[df_transfers["ID"] != id_transf]
+            save_data(df_transfers, TRANSFERS_FILE)
+            st.session_state.transfer_a_editar = None
+            st.rerun()
+        if col_cancel.button("Cancelar", use_container_width=True):
+            st.session_state.transfer_a_editar = None
+            st.rerun()
+
+    # =========================================================
+    # VISTA 5: PESTAÑAS PRINCIPALES (VISTA NORMAL DE NAVEGACIÓN)
     # =========================================================
     else:
         opciones_menu = ["📊 Dashboard", "🕰️ Historial", "⚖️ Balance"]
@@ -275,42 +343,40 @@ else:
 
         # --- PESTAÑA 2: HISTORIAL ---
         with tabs[1]:
-            if st.session_state.gasto_a_editar:
-                fila_actual = df_gastos[df_gastos["ID"] == st.session_state.gasto_a_editar].iloc[0]
-                if st.button("⬅️ Cancelar Edición"): st.session_state.gasto_a_editar = None; st.rerun()
-                st.markdown(f"**Editando:** {fila_actual['Concepto']}")
-                if st.button("🗑️ Eliminar Definitivamente", type="primary"): 
-                    save_data(df_gastos[df_gastos["ID"] != st.session_state.gasto_a_editar], DATA_FILE)
-                    st.session_state.gasto_a_editar = None; st.rerun()
-            elif st.session_state.transfer_a_editar:
-                if st.button("⬅️ Cancelar Edición"): st.session_state.transfer_a_editar = None; st.rerun()
-                if st.button("🗑️ Eliminar Transferencia", type="primary"): 
-                    save_data(df_transfers[df_transfers["ID"] != st.session_state.transfer_a_editar], TRANSFERS_FILE)
-                    st.session_state.transfer_a_editar = None; st.rerun()
-            else:
-                subtab1, subtab2 = st.tabs(["🛒 Gastos", "💸 Transferencias"])
-                with subtab1:
-                    if not df_gastos.empty:
-                        df_gastos["Fecha"] = pd.to_datetime(df_gastos["Fecha"])
-                        for _, f in df_gastos.sort_values("Fecha", ascending=False).iterrows():
-                            with st.expander(f"{f['Fecha'].strftime('%d/%m/%Y')} | {f['Concepto']} | ${f['Monto_Original']:,.2f} {f['Moneda']}"):
-                                st.write(f"**Por:** {f['Pagado_por']} | **Cat:** {f['Categoria']}")
-                                if st.button("Editar / Eliminar", key=f"e_{f['ID']}"): st.session_state.gasto_a_editar = f["ID"]; st.rerun()
-                with subtab2:
-                    if not df_transfers.empty:
-                        df_transfers["Fecha"] = pd.to_datetime(df_transfers["Fecha"])
-                        for _, f in df_transfers.sort_values("Fecha", ascending=False).iterrows():
-                            with st.expander(f"{f['Fecha'].strftime('%d/%m/%Y')} | {f['Origen']} ➡️ {f['Destino']} | ${f['Monto_Original']:,.2f} {f['Moneda']}"):
-                                if st.button("Eliminar", key=f"t_{f['ID']}"): st.session_state.transfer_a_editar = f["ID"]; st.rerun()
+            subtab1, subtab2 = st.tabs(["🛒 Gastos", "💸 Transferencias"])
+            with subtab1:
+                if not df_gastos.empty:
+                    df_gastos["Fecha"] = pd.to_datetime(df_gastos["Fecha"])
+                    for _, f in df_gastos.sort_values("Fecha", ascending=False).iterrows():
+                        with st.expander(f"{f['Fecha'].strftime('%d/%m/%Y')} | {f['Concepto']} | ${f['Monto_Original']:,.2f} {f['Moneda']}"):
+                            st.write(f"**Por:** {f['Pagado_por']} | **Cat:** {f['Categoria']}")
+                            if st.button("✏️ Editar / Eliminar", key=f"e_{f['ID']}"): 
+                                st.session_state.gasto_a_editar = f["ID"]
+                                st.rerun()
+                else:
+                    st.info("No hay gastos registrados.")
+            with subtab2:
+                if not df_transfers.empty:
+                    df_transfers["Fecha"] = pd.to_datetime(df_transfers["Fecha"])
+                    for _, f in df_transfers.sort_values("Fecha", ascending=False).iterrows():
+                        with st.expander(f"{f['Fecha'].strftime('%d/%m/%Y')} | {f['Origen']} ➡️ {f['Destino']} | ${f['Monto_Original']:,.2f} {f['Moneda']}"):
+                            if st.button("🗑️ Gestionar", key=f"t_{f['ID']}"): 
+                                st.session_state.transfer_a_editar = f["ID"]
+                                st.rerun()
+                else:
+                    st.info("No hay transferencias registradas.")
 
         # --- PESTAÑA 3: BALANCE ---
         with tabs[2]:
             usrs = [u for u in usuarios_df["Usuario"].tolist() if u.lower() != "admin"]
             if len(usrs) >= 2:
                 u1, u2 = usrs[0], usrs[1]
-                g1, g2 = df_gastos[df_gastos["Pagado_por"] == u1]["Monto_UYU"].sum() if not df_gastos.empty else 0, df_gastos[df_gastos["Pagado_por"] == u2]["Monto_UYU"].sum() if not df_gastos.empty else 0
-                e1, r1 = df_transfers[df_transfers["Origen"] == u1]["Monto_UYU"].sum() if not df_transfers.empty else 0, df_transfers[df_transfers["Destino"] == u1]["Monto_UYU"].sum() if not df_transfers.empty else 0
-                e2, r2 = df_transfers[df_transfers["Origen"] == u2]["Monto_UYU"].sum() if not df_transfers.empty else 0, df_transfers[df_transfers["Destino"] == u2]["Monto_UYU"].sum() if not df_transfers.empty else 0
+                g1 = df_gastos[df_gastos["Pagado_por"] == u1]["Monto_UYU"].sum() if not df_gastos.empty else 0
+                g2 = df_gastos[df_gastos["Pagado_por"] == u2]["Monto_UYU"].sum() if not df_gastos.empty else 0
+                e1 = df_transfers[df_transfers["Origen"] == u1]["Monto_UYU"].sum() if not df_transfers.empty else 0
+                r1 = df_transfers[df_transfers["Destino"] == u1]["Monto_UYU"].sum() if not df_transfers.empty else 0
+                e2 = df_transfers[df_transfers["Origen"] == u2]["Monto_UYU"].sum() if not df_transfers.empty else 0
+                r2 = df_transfers[df_transfers["Destino"] == u2]["Monto_UYU"].sum() if not df_transfers.empty else 0
                 
                 s1, s2 = g1 + e1 - r1, g2 + e2 - r2
                 meta = (g1 + g2) / 2
