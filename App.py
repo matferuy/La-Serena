@@ -48,8 +48,10 @@ DATA_FILE = "contabilidad_casa.csv"
 USERS_FILE = "usuarios.csv"
 TRANSFERS_FILE = "transferencias.csv"
 DIR_COMPROBANTES = "comprobantes"
+DIR_BACKUPS = "backups"
 
 if not os.path.exists(DIR_COMPROBANTES): os.makedirs(DIR_COMPROBANTES)
+if not os.path.exists(DIR_BACKUPS): os.makedirs(DIR_BACKUPS)
 
 # --- FUNCIÓN: OBTENER TIPO DE CAMBIO AUTOMÁTICO ---
 @st.cache_data(ttl=3600)
@@ -86,6 +88,17 @@ def load_transfers():
     return pd.DataFrame(columns=["ID", "Fecha", "Origen", "Destino", "Moneda", "Monto_Original", "Tasa_Cambio", "Monto_UYU", "Archivo_Adjunto", "Modificado_por_Admin"])
 
 def save_data(df, file_name): df.to_csv(file_name, index=False)
+
+def generar_respaldo_excel(df_g, df_t):
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    nombre = f"respaldo_{timestamp}.xlsx"
+    ruta = os.path.join(DIR_BACKUPS, nombre)
+    with pd.ExcelWriter(ruta, engine="openpyxl") as writer:
+        df_g.to_excel(writer, sheet_name="Gastos", index=False)
+        df_t.to_excel(writer, sheet_name="Transferencias", index=False)
+    with open(ruta, "rb") as f:
+        datos = f.read()
+    return ruta, nombre, datos
 
 # --- INICIALIZACIÓN DE SESIÓN ---
 if "logueado" not in st.session_state: st.session_state.logueado = False
@@ -405,6 +418,17 @@ else:
         # --- PESTAÑA 4: ADMIN ---
         if es_admin:
             with tabs[3]:
+                st.markdown("#### 💾 Respaldo de Datos")
+                if st.button("Generar Respaldo Excel", type="primary", use_container_width=True):
+                    ruta, nombre, datos = generar_respaldo_excel(df_gastos, df_transfers)
+                    st.session_state["ultimo_respaldo"] = {"nombre": nombre, "datos": datos, "ruta": ruta}
+
+                if "ultimo_respaldo" in st.session_state:
+                    r = st.session_state["ultimo_respaldo"]
+                    st.success(f"Respaldo guardado en: `{r['ruta']}`")
+                    st.download_button("⬇️ Descargar", data=r["datos"], file_name=r["nombre"], mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+
+                st.markdown("---")
                 st.dataframe(usuarios_df[["Usuario"]], use_container_width=True)
                 st.markdown("#### Registrar Socio")
                 with st.form("nuevo_socio_form"):
