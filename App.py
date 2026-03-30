@@ -5,6 +5,9 @@ import datetime
 import plotly.express as px
 import requests
 import uuid
+import io
+import gspread
+from google.oauth2.service_account import Credentials
 
 # --- CONFIGURACIÓN INICIAL ---
 st.set_page_config(page_title="Casa La Serena", page_icon="🏡", layout="wide", initial_sidebar_state="collapsed")
@@ -50,8 +53,41 @@ TRANSFERS_FILE = "transferencias.csv"
 DIR_COMPROBANTES = "comprobantes"
 DIR_BACKUPS = "backups"
 
-if not os.path.exists(DIR_COMPROBANTES): os.makedirs(DIR_COMPROBANTES)
-if not os.path.exists(DIR_BACKUPS): os.makedirs(DIR_BACKUPS)
+for d in [DIR_COMPROBANTES, DIR_BACKUPS]:
+    try: os.makedirs(d, exist_ok=True)
+    except: pass
+
+# --- GOOGLE SHEETS ---
+USE_GSHEETS = "gcp_service_account" in st.secrets and "spreadsheet_id" in st.secrets
+
+SHEET_NAMES = {DATA_FILE: "Gastos", TRANSFERS_FILE: "Transferencias", USERS_FILE: "Usuarios"}
+GASTOS_COLS = ["ID", "Fecha", "Concepto", "Moneda", "Monto_Original", "Tasa_Cambio", "Monto_UYU", "Pagado_por", "Categoria", "Archivo_Adjunto", "Modificado_por_Admin"]
+TRANSFERS_COLS = ["ID", "Fecha", "Origen", "Destino", "Moneda", "Monto_Original", "Tasa_Cambio", "Monto_UYU", "Archivo_Adjunto", "Modificado_por_Admin"]
+USERS_COLS = ["Usuario", "Clave"]
+
+@st.cache_resource
+def get_gspread_client():
+    creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
+    return gspread.authorize(creds)
+
+def _get_or_create_ws(sheet_name, columns):
+    spreadsheet = get_gspread_client().open_by_key(st.secrets["spreadsheet_id"])
+    try:
+        return spreadsheet.worksheet(sheet_name)
+    except gspread.WorksheetNotFound:
+        ws = spreadsheet.add_worksheet(sheet_name, rows=1000, cols=len(columns))
+        ws.update('A1', [columns])
+        return ws
+
+def load_sheet_as_df(sheet_name, columns):
+    ws = _get_or_create_ws(sheet_name, columns)
+    records = ws.get_all_records()
+    return pd.DataFrame(records) if records else pd.DataFrame(columns=columns)
+
+def save_df_to_sheet(df, sheet_name):
+    ws = _get_or_create_ws(sheet_name, df.columns.tolist())
+    ws.clear()
+    ws.update('A1', [df.columns.tolist()] + df.astype(str).values.tolist())
 
 # --- FUNCIÓN: OBTENER TIPO DE CAMBIO AUTOMÁTICO ---
 @st.cache_data(ttl=3600)
@@ -64,40 +100,69 @@ def obtener_tasa_usd_uyu():
 
 # --- FUNCIONES DE DATOS Y LOGS ---
 def load_users():
+    if USE_GSHEETS:
+        df = load_sheet_as_df("Usuarios", USERS_COLS)
+        if df.empty:
+            default = pd.DataFrame([{"Usuario": "admin", "Clave": "1234"}])
+            save_df_to_sheet(default, "Usuarios")
+            return default
+        return df.astype(str)
     if os.path.exists(USERS_FILE): return pd.read_csv(USERS_FILE, dtype={"Usuario": str, "Clave": str})
     default_users = pd.DataFrame([{"Usuario": "admin", "Clave": "1234"}])
     default_users.to_csv(USERS_FILE, index=False)
     return default_users
 
 def load_data():
+    if USE_GSHEETS:
+        df = load_sheet_as_df("Gastos", GASTOS_COLS)
+        if not df.empty:
+            if "ID" not in df.columns: df["ID"] = [uuid.uuid4().hex for _ in range(len(df))]
+            if "Modificado_por_Admin" not in df.columns: df["Modificado_por_Admin"] = False
+            else: df["Modificado_por_Admin"] = df["Modificado_por_Admin"].isin([True, "True", "true", 1, "1"])
+        return df
     if os.path.exists(DATA_FILE):
         df = pd.read_csv(DATA_FILE)
         if "ID" not in df.columns: df["ID"] = [uuid.uuid4().hex for _ in range(len(df))]
         if "Modificado_por_Admin" not in df.columns: df["Modificado_por_Admin"] = False
-        save_data(df, DATA_FILE)
+        df.to_csv(DATA_FILE, index=False)
         return df
-    return pd.DataFrame(columns=["ID", "Fecha", "Concepto", "Moneda", "Monto_Original", "Tasa_Cambio", "Monto_UYU", "Pagado_por", "Categoria", "Archivo_Adjunto", "Modificado_por_Admin"])
+    return pd.DataFrame(columns=GASTOS_COLS)
 
 def load_transfers():
+    if USE_GSHEETS:
+        df = load_sheet_as_df("Transferencias", TRANSFERS_COLS)
+        if not df.empty:
+            if "ID" not in df.columns: df["ID"] = [uuid.uuid4().hex for _ in range(len(df))]
+            if "Modificado_por_Admin" not in df.columns: df["Modificado_por_Admin"] = False
+            else: df["Modificado_por_Admin"] = df["Modificado_por_Admin"].isin([True, "True", "true", 1, "1"])
+        return df
     if os.path.exists(TRANSFERS_FILE):
         df = pd.read_csv(TRANSFERS_FILE)
         if "ID" not in df.columns: df["ID"] = [uuid.uuid4().hex for _ in range(len(df))]
         if "Modificado_por_Admin" not in df.columns: df["Modificado_por_Admin"] = False
-        save_data(df, TRANSFERS_FILE)
+        df.to_csv(TRANSFERS_FILE, index=False)
         return df
-    return pd.DataFrame(columns=["ID", "Fecha", "Origen", "Destino", "Moneda", "Monto_Original", "Tasa_Cambio", "Monto_UYU", "Archivo_Adjunto", "Modificado_por_Admin"])
+    return pd.DataFrame(columns=TRANSFERS_COLS)
 
-def save_data(df, file_name): df.to_csv(file_name, index=False)
+def save_data(df, file_name):
+    if USE_GSHEETS:
+        save_df_to_sheet(df, SHEET_NAMES[file_name])
+    else:
+        df.to_csv(file_name, index=False)
 
 def generar_respaldo_excel(df_g, df_t):
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     nombre = f"respaldo_{timestamp}.xlsx"
-    ruta = os.path.join(DIR_BACKUPS, nombre)
-    with pd.ExcelWriter(ruta, engine="openpyxl") as writer:
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
         df_g.to_excel(writer, sheet_name="Gastos", index=False)
         df_t.to_excel(writer, sheet_name="Transferencias", index=False)
-    with open(ruta, "rb") as f:
-        datos = f.read()
+    datos = buffer.getvalue()
+    try:
+        ruta = os.path.join(DIR_BACKUPS, nombre)
+        with open(ruta, "wb") as f: f.write(datos)
+    except Exception:
+        ruta = nombre
     return ruta, nombre, datos
 
 # --- INICIALIZACIÓN DE SESIÓN ---
