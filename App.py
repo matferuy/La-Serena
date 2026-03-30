@@ -12,37 +12,77 @@ from google.oauth2.service_account import Credentials
 # --- CONFIGURACIÓN INICIAL ---
 st.set_page_config(page_title="Casa La Serena", page_icon="🏡", layout="wide", initial_sidebar_state="collapsed")
 
-# --- MAGIA CSS: DISEÑO UI/UX MEJORADO Y COMPATIBLE CON MODO OSCURO ---
+# --- DISEÑO ---
 st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&display=swap');
-    
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
     html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-    
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-    
-    .block-container { padding-top: 1rem; max-width: 900px; }
+    #MainMenu { visibility: hidden; }
+    footer { visibility: hidden; }
+    header { visibility: hidden; }
+    .block-container { padding-top: 0.5rem; max-width: 860px; }
 
-    .stButton>button {
-        border-radius: 10px; font-weight: 600; height: 3rem; transition: all 0.3s ease;
+    /* Botones */
+    .stButton > button {
+        border-radius: 12px; font-weight: 600; font-size: 0.9rem;
+        height: 2.75rem; transition: all 0.18s ease; letter-spacing: 0.01em;
     }
-    .stButton>button[kind="primary"] {
-        background: linear-gradient(135deg, #2563EB, #1D4ED8); border: none; color: white;
+    .stButton > button[kind="primary"] {
+        background: linear-gradient(135deg, #4F46E5, #7C3AED);
+        border: none; color: white;
+        box-shadow: 0 4px 14px rgba(79,70,229,0.38);
     }
+    .stButton > button[kind="primary"]:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 20px rgba(79,70,229,0.5);
+    }
+    .stButton > button:not([kind="primary"]):hover { transform: translateY(-1px); }
 
+    /* Expanders */
     div[data-testid="stExpander"] {
-        background-color: var(--secondary-background-color); border-radius: 12px;
-        border: 1px solid var(--faded-text-05); margin-bottom: 10px;
+        background: var(--secondary-background-color);
+        border-radius: 16px;
+        border: 1px solid rgba(148,163,184,0.15);
+        margin-bottom: 10px;
+        overflow: hidden;
     }
-    
-    .kpi-card-blue { background: linear-gradient(135deg, #1E3A8A, #3B82F6); color: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 10px rgba(59, 130, 246, 0.3); margin-bottom: 15px; }
-    .kpi-card-green { background: linear-gradient(135deg, #064E3B, #10B981); color: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.3); margin-bottom: 15px; }
-    .kpi-card-dynamic { background: var(--background-color); color: var(--text-color); padding: 15px; border-radius: 16px; border: 1px solid var(--faded-text-10); margin-bottom: 10px; }
-    .kpi-title { font-size: 0.9rem; opacity: 0.9; margin-bottom: 5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
-    .kpi-value { font-size: 2rem; font-weight: 800; margin: 0; line-height: 1.2;}
-    .kpi-subtitle { font-size: 0.8rem; opacity: 0.7; margin-top: 5px;}
+
+    /* Tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 2px; background: var(--secondary-background-color);
+        border-radius: 14px; padding: 4px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        border-radius: 10px; font-weight: 600; font-size: 0.85rem;
+    }
+    .stTabs [aria-selected="true"] {
+        background: var(--background-color) !important;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    /* KPI Cards */
+    .kpi-card { padding: 22px 24px; border-radius: 20px; margin-bottom: 12px; }
+    .kpi-card-primary {
+        background: linear-gradient(135deg, #312E81, #4F46E5);
+        color: white; box-shadow: 0 8px 32px rgba(79,70,229,0.28);
+    }
+    .kpi-card-success {
+        background: linear-gradient(135deg, #065F46, #059669);
+        color: white; box-shadow: 0 8px 32px rgba(5,150,105,0.28);
+    }
+    .kpi-card-neutral {
+        background: var(--background-color); color: var(--text-color);
+        border: 1.5px solid rgba(148,163,184,0.2);
+    }
+    .kpi-label {
+        font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 1.2px; opacity: 0.65; margin-bottom: 8px;
+    }
+    .kpi-value {
+        font-size: 1.85rem; font-weight: 800;
+        line-height: 1.1; letter-spacing: -0.03em; margin: 0;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -176,8 +216,15 @@ usuarios_df = load_users()
 
 # --- PANTALLA DE LOGIN ---
 if not st.session_state.logueado:
-    st.markdown("<h1 style='text-align: center; color: #1E3A8A; font-weight: 800; margin-bottom: 0;'>La Serena</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: var(--text-color); margin-bottom: 30px;'>Gestión y Contabilidad del Proyecto</p>", unsafe_allow_html=True)
+    st.markdown("""
+        <div style='text-align:center; padding: 48px 0 28px 0;'>
+            <div style='font-size:3rem; margin-bottom:14px;'>🏡</div>
+            <h1 style='font-size:2.2rem; font-weight:800; letter-spacing:-0.04em; margin:0 0 8px 0;
+                background:linear-gradient(135deg,#4F46E5,#7C3AED);
+                -webkit-background-clip:text; -webkit-text-fill-color:transparent;'>La Serena</h1>
+            <p style='font-size:0.88rem; font-weight:500; margin:0; opacity:0.5;'>Gestión y Contabilidad del Proyecto</p>
+        </div>
+    """, unsafe_allow_html=True)
     with st.container():
         with st.form("login_form"):
             usuario = st.text_input("Usuario")
@@ -199,16 +246,21 @@ else:
     # --- CABECERA MÓVIL ---
     col_perfil, col_salir = st.columns([3, 1])
     with col_perfil:
-        st.markdown(f"<div style='padding-top: 15px; font-size: 1.1rem;'>👤 <b>{st.session_state.usuario_actual}</b></div>", unsafe_allow_html=True)
+        st.markdown(f"""
+            <div style='padding:10px 0 4px 0;'>
+                <div style='font-size:1.1rem; font-weight:700; letter-spacing:-0.02em;'>🏡 La Serena</div>
+                <div style='font-size:0.75rem; opacity:0.45; font-weight:500; margin-top:2px;'>Hola, {st.session_state.usuario_actual} 👋</div>
+            </div>
+        """, unsafe_allow_html=True)
     with col_salir:
-        if st.button("🚪 Salir", use_container_width=True):
+        if st.button("Salir", use_container_width=True):
             st.session_state.logueado = False
             st.session_state.modo_registro = None
             st.session_state.gasto_a_editar = None
             st.session_state.transfer_a_editar = None
             st.rerun()
 
-    st.markdown("<hr style='margin: 5px 0px 15px 0px;'>", unsafe_allow_html=True)
+    st.markdown("<div style='border-top:1px solid rgba(148,163,184,0.15); margin: 4px 0 18px 0;'></div>", unsafe_allow_html=True)
 
     # --- BOTÓN DESPLEGABLE DE NUEVO REGISTRO ("+") ---
     if st.session_state.modo_registro is None and st.session_state.gasto_a_editar is None and st.session_state.transfer_a_editar is None:
@@ -386,21 +438,21 @@ else:
                 tasa_actual = obtener_tasa_usd_uyu()
                 
                 kpi1, kpi2, kpi3 = st.columns(3)
-                with kpi1: st.markdown(f'<div class="kpi-card-blue"><div class="kpi-title">Inversión</div><div class="kpi-value">${total_uyu:,.0f}</div></div>', unsafe_allow_html=True)
-                with kpi2: st.markdown(f'<div class="kpi-card-green"><div class="kpi-title">Est. USD</div><div class="kpi-value">U$S {total_uyu/tasa_actual:,.0f}</div></div>', unsafe_allow_html=True)
-                with kpi3: st.markdown(f'<div class="kpi-card-dynamic"><div class="kpi-title">Registros</div><div class="kpi-value">{len(df_dash)}</div></div>', unsafe_allow_html=True)
+                with kpi1: st.markdown(f'<div class="kpi-card kpi-card-primary"><div class="kpi-label">Inversión Total</div><div class="kpi-value">${total_uyu:,.0f}</div></div>', unsafe_allow_html=True)
+                with kpi2: st.markdown(f'<div class="kpi-card kpi-card-success"><div class="kpi-label">Est. USD</div><div class="kpi-value">U$S {total_uyu/tasa_actual:,.0f}</div></div>', unsafe_allow_html=True)
+                with kpi3: st.markdown(f'<div class="kpi-card kpi-card-neutral"><div class="kpi-label">Registros</div><div class="kpi-value">{len(df_dash)}</div></div>', unsafe_allow_html=True)
 
                 st.markdown("<br>", unsafe_allow_html=True)
 
                 col_chart1, col_chart2 = st.columns(2)
                 with col_chart1:
                     st.markdown("#### 📊 En qué se gastó")
-                    fig_pie = px.pie(df_dash.groupby("Categoria")["Monto_UYU"].sum().reset_index(), values='Monto_UYU', names='Categoria', hole=0.5, color_discrete_sequence=px.colors.qualitative.Pastel)
+                    fig_pie = px.pie(df_dash.groupby("Categoria")["Monto_UYU"].sum().reset_index(), values='Monto_UYU', names='Categoria', hole=0.55, color_discrete_sequence=["#4F46E5","#7C3AED","#059669","#0EA5E9","#F59E0B"])
                     fig_pie.update_layout(margin=dict(t=10, b=0, l=0, r=0), showlegend=False, paper_bgcolor="rgba(0,0,0,0)")
                     st.plotly_chart(fig_pie, use_container_width=True, config={'displayModeBar': False})
                 with col_chart2:
                     st.markdown("#### 👥 Quién pagó (Gastos directos)")
-                    fig_bar = px.bar(df_dash.groupby("Pagado_por")["Monto_UYU"].sum().reset_index(), x='Pagado_por', y='Monto_UYU', text_auto='.2s', color='Pagado_por', color_discrete_sequence=["#3B82F6", "#10B981", "#F59E0B"])
+                    fig_bar = px.bar(df_dash.groupby("Pagado_por")["Monto_UYU"].sum().reset_index(), x='Pagado_por', y='Monto_UYU', text_auto='.2s', color='Pagado_por', color_discrete_sequence=["#4F46E5","#059669","#7C3AED"])
                     fig_bar.update_layout(margin=dict(t=10, b=0, l=0, r=0), showlegend=False, xaxis_title="", yaxis_title="", paper_bgcolor="rgba(0,0,0,0)")
                     st.plotly_chart(fig_bar, use_container_width=True, config={'displayModeBar': False})
 
@@ -419,7 +471,7 @@ else:
                 gastos_evolucion = gastos_evolucion.sort_values("Fecha")
                 gastos_evolucion["Gasto_Acumulado"] = gastos_evolucion.groupby("Categoria")["Monto_UYU"].cumsum()
                 
-                fig_area = px.area(gastos_evolucion, x='Fecha', y='Gasto_Acumulado', color='Categoria', color_discrete_sequence=px.colors.qualitative.Pastel)
+                fig_area = px.area(gastos_evolucion, x='Fecha', y='Gasto_Acumulado', color='Categoria', color_discrete_sequence=["#4F46E5","#7C3AED","#059669","#0EA5E9","#F59E0B"])
                 
                 # Ajuste de layout general
                 fig_area.update_layout(margin=dict(t=10, b=10, l=0, r=0), xaxis_title="", yaxis_title="Acumulado (UYU)", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", legend=dict(orientation="h", yanchor="bottom", y=-0.5, xanchor="center", x=0.5, title_text=""))
@@ -472,13 +524,13 @@ else:
                 meta = (g1 + g2) / 2
                 dif = abs(s1 - meta)
 
-                if dif < 1: st.markdown('<div class="kpi-card-green" style="text-align:center;">CUENTAS CLARAS</div>', unsafe_allow_html=True)
-                elif s1 > meta: st.markdown(f'<div class="kpi-card-blue" style="text-align:center;">{u2} debe a {u1}:<br><b>${dif:,.0f} UYU</b></div>', unsafe_allow_html=True)
-                else: st.markdown(f'<div class="kpi-card-blue" style="text-align:center;">{u1} debe a {u2}:<br><b>${dif:,.0f} UYU</b></div>', unsafe_allow_html=True)
-                
+                if dif < 1: st.markdown('<div class="kpi-card kpi-card-success" style="text-align:center;"><div class="kpi-label">Estado</div><div class="kpi-value" style="font-size:1.4rem;">✓ Cuentas Claras</div></div>', unsafe_allow_html=True)
+                elif s1 > meta: st.markdown(f'<div class="kpi-card kpi-card-primary" style="text-align:center;"><div class="kpi-label">{u2} debe a {u1}</div><div class="kpi-value">${dif:,.0f} <span style="font-size:1rem;opacity:0.6;">UYU</span></div></div>', unsafe_allow_html=True)
+                else: st.markdown(f'<div class="kpi-card kpi-card-primary" style="text-align:center;"><div class="kpi-label">{u1} debe a {u2}</div><div class="kpi-value">${dif:,.0f} <span style="font-size:1rem;opacity:0.6;">UYU</span></div></div>', unsafe_allow_html=True)
+
                 c1, c2 = st.columns(2)
-                with c1: st.markdown(f'<div class="kpi-card-dynamic"><b>{u1}</b><br>Neto: ${s1:,.0f}</div>', unsafe_allow_html=True)
-                with c2: st.markdown(f'<div class="kpi-card-dynamic"><b>{u2}</b><br>Neto: ${s2:,.0f}</div>', unsafe_allow_html=True)
+                with c1: st.markdown(f'<div class="kpi-card kpi-card-neutral"><div class="kpi-label">{u1}</div><div class="kpi-value" style="font-size:1.5rem;">${s1:,.0f}</div></div>', unsafe_allow_html=True)
+                with c2: st.markdown(f'<div class="kpi-card kpi-card-neutral"><div class="kpi-label">{u2}</div><div class="kpi-value" style="font-size:1.5rem;">${s2:,.0f}</div></div>', unsafe_allow_html=True)
 
         # --- PESTAÑA 4: ADMIN ---
         if es_admin:
