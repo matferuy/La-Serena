@@ -164,6 +164,32 @@ st.markdown("""
     .balance-bar-wrap { border-radius: 100px; overflow: hidden; height: 12px; background: rgba(148,163,184,0.15); }
     .balance-bar-fill { height: 100%; border-radius: 100px; transition: width 0.6s cubic-bezier(.4,0,.2,1); }
 
+    /* ── Etapa cards ── */
+    .etapa-card {
+        background: var(--background-color);
+        border: 1.5px solid rgba(148,163,184,0.18);
+        border-radius: 20px; padding: 20px 22px 16px 22px;
+        margin-bottom: 14px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+    }
+    .etapa-nombre { font-size: 1.05rem; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 4px; }
+    .etapa-desc { font-size: 0.82rem; opacity: 0.5; margin-bottom: 14px; }
+    .etapa-progress-wrap { border-radius: 100px; overflow:hidden; height: 8px; background: rgba(148,163,184,0.15); margin-bottom: 6px; }
+    .etapa-progress-fill { height: 100%; border-radius: 100px; }
+    .estado-pendiente { background: rgba(100,116,139,0.12); color: #475569; }
+    .estado-curso     { background: rgba(79,70,229,0.12);   color: #4F46E5; }
+    .estado-completado{ background: rgba(5,150,105,0.12);   color: #059669; }
+
+    /* ── Avance cards ── */
+    .avance-card {
+        background: var(--secondary-background-color);
+        border-radius: 18px; padding: 16px 18px;
+        margin-bottom: 10px; border: 1.5px solid rgba(148,163,184,0.13);
+    }
+    .avance-fecha { font-size: 0.72rem; font-weight:700; opacity:0.4; text-transform:uppercase; letter-spacing:0.8px; }
+    .avance-titulo { font-size: 0.95rem; font-weight: 800; margin: 4px 0 6px 0; }
+    .avance-detalle { font-size: 0.83rem; opacity: 0.65; line-height:1.5; }
+
     /* ── Divider ── */
     .divider { border: none; border-top: 1.5px solid rgba(148,163,184,0.12); margin: 20px 0; }
 
@@ -185,6 +211,9 @@ st.markdown("""
 DATA_FILE = "contabilidad_casa.csv"
 USERS_FILE = "usuarios.csv"
 TRANSFERS_FILE = "transferencias.csv"
+ETAPAS_FILE = "etapas.csv"
+AVANCES_FILE = "avances.csv"
+PLANOS_FILE = "planos.csv"
 DIR_COMPROBANTES = "comprobantes"
 DIR_BACKUPS = "backups"
 
@@ -195,10 +224,16 @@ for d in [DIR_COMPROBANTES, DIR_BACKUPS]:
 # --- GOOGLE SHEETS ---
 USE_GSHEETS = "gcp_service_account" in st.secrets and "spreadsheet_id" in st.secrets
 
-SHEET_NAMES = {DATA_FILE: "Gastos", TRANSFERS_FILE: "Transferencias", USERS_FILE: "Usuarios"}
+SHEET_NAMES = {
+    DATA_FILE: "Gastos", TRANSFERS_FILE: "Transferencias", USERS_FILE: "Usuarios",
+    ETAPAS_FILE: "Etapas", AVANCES_FILE: "Avances", PLANOS_FILE: "Planos"
+}
 GASTOS_COLS = ["ID", "Fecha", "Concepto", "Moneda", "Monto_Original", "Tasa_Cambio", "Monto_UYU", "Pagado_por", "Categoria", "Archivo_Adjunto", "Modificado_por_Admin"]
 TRANSFERS_COLS = ["ID", "Fecha", "Origen", "Destino", "Moneda", "Monto_Original", "Tasa_Cambio", "Monto_UYU", "Archivo_Adjunto", "Modificado_por_Admin"]
 USERS_COLS = ["Usuario", "Clave"]
+ETAPAS_COLS = ["ID", "Nombre", "Descripcion", "Estado", "Fecha_Inicio", "Fecha_Fin_Est", "Progreso_Pct", "Plano_URL"]
+AVANCES_COLS = ["ID", "Fecha", "Etapa", "Titulo", "Detalle", "Foto_URL", "Tags", "Registrado_por"]
+PLANOS_COLS = ["ID", "Nombre", "Descripcion", "Version", "Fecha", "URL", "Tipo"]
 
 @st.cache_resource
 def get_gspread_client():
@@ -373,6 +408,27 @@ def load_transfers():
         return df
     return pd.DataFrame(columns=TRANSFERS_COLS)
 
+def load_etapas():
+    if USE_GSHEETS:
+        return load_sheet_as_df("Etapas", ETAPAS_COLS)
+    if os.path.exists(ETAPAS_FILE):
+        return pd.read_csv(ETAPAS_FILE)
+    return pd.DataFrame(columns=ETAPAS_COLS)
+
+def load_avances():
+    if USE_GSHEETS:
+        return load_sheet_as_df("Avances", AVANCES_COLS)
+    if os.path.exists(AVANCES_FILE):
+        return pd.read_csv(AVANCES_FILE)
+    return pd.DataFrame(columns=AVANCES_COLS)
+
+def load_planos():
+    if USE_GSHEETS:
+        return load_sheet_as_df("Planos", PLANOS_COLS)
+    if os.path.exists(PLANOS_FILE):
+        return pd.read_csv(PLANOS_FILE)
+    return pd.DataFrame(columns=PLANOS_COLS)
+
 def save_data(df, file_name):
     if USE_GSHEETS:
         save_df_to_sheet(df, SHEET_NAMES[file_name])
@@ -401,6 +457,8 @@ if "usuario_actual" not in st.session_state: st.session_state.usuario_actual = "
 if "gasto_a_editar" not in st.session_state: st.session_state.gasto_a_editar = None
 if "transfer_a_editar" not in st.session_state: st.session_state.transfer_a_editar = None
 if "modo_registro" not in st.session_state: st.session_state.modo_registro = None
+if "obra_modo" not in st.session_state: st.session_state.obra_modo = None
+if "etapa_a_editar" not in st.session_state: st.session_state.etapa_a_editar = None
 
 usuarios_df = load_users()
 
@@ -432,6 +490,9 @@ if not st.session_state.logueado:
 else:
     df_gastos = load_data()
     df_transfers = load_transfers()
+    df_etapas = load_etapas()
+    df_avances = load_avances()
+    df_planos = load_planos()
     es_admin = st.session_state.usuario_actual.lower() == "admin"
 
     # --- CABECERA ---
@@ -679,7 +740,7 @@ else:
     # VISTA 5: PESTAÑAS PRINCIPALES (VISTA NORMAL DE NAVEGACIÓN)
     # =========================================================
     else:
-        opciones_menu = ["📊 Dashboard", "🕰️ Historial", "⚖️ Balance"]
+        opciones_menu = ["📊 Dashboard", "🕰️ Historial", "⚖️ Balance", "🏗️ Obra"]
         if es_admin: opciones_menu.append("⚙️ Admin")
         tabs = st.tabs(opciones_menu)
 
@@ -770,12 +831,13 @@ else:
                         )
                         expander_label = f"{f['Fecha'].strftime('%d/%m/%y')}  ·  {f['Concepto']}  ·  ${f['Monto_Original']:,.0f} {f['Moneda']}"
                         with st.expander(expander_label):
+                            clip_span = '<span style="font-size:0.8rem;opacity:0.55;">📎 Comprobante</span>' if adjunto.startswith('https://') else ''
                             st.markdown(
                                 f"<div style='display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:8px;'>"
                                 f"<span class='badge {badge_cls}'>{badge_lbl}</span>"
                                 f"<span style='font-size:0.8rem;opacity:0.55;'>👤 {f['Pagado_por']}</span>"
                                 f"<span style='font-size:0.8rem;opacity:0.55;'>📅 {f['Fecha'].strftime('%d/%m/%Y')}</span>"
-                                f"{'<span style=\"font-size:0.8rem;opacity:0.55;\">📎 Comprobante</span>' if adjunto.startswith('https://') else ''}"
+                                f"{clip_span}"
                                 f"</div>",
                                 unsafe_allow_html=True
                             )
@@ -862,9 +924,334 @@ else:
                 with c2:
                     st.markdown(f'<div class="kpi-card kpi-card-neutral"><div class="kpi-label">{u2}</div><div class="kpi-value" style="font-size:1.6rem;">${s2:,.0f}</div><div class="kpi-sub" style="color:var(--text-color);">aportado neto</div></div>', unsafe_allow_html=True)
 
-        # --- PESTAÑA 4: ADMIN ---
+        # --- PESTAÑA 4: OBRA ---
+        with tabs[3]:
+            ESTADO_COLORS = {
+                "Pendiente":  ("estado-pendiente", "⏳"),
+                "En Curso":   ("estado-curso",     "🔨"),
+                "Completado": ("estado-completado","✅"),
+            }
+            PROGRESS_COLORS = {
+                "Pendiente":  "#94A3B8",
+                "En Curso":   "#4F46E5",
+                "Completado": "#059669",
+            }
+
+            obra_tabs = st.tabs(["📋 Etapas", "📸 Avances", "📐 Planos"])
+
+            # ── SUBTAB 1: ETAPAS ──────────────────────────────────────
+            with obra_tabs[0]:
+                # Formulario nueva etapa / edición
+                if st.session_state.obra_modo == "nueva_etapa" or st.session_state.etapa_a_editar is not None:
+                    editando = st.session_state.etapa_a_editar is not None
+                    if editando:
+                        fila_et = df_etapas[df_etapas["ID"] == st.session_state.etapa_a_editar].iloc[0]
+                        st.markdown(f'<div class="section-title">Editar Etapa: {fila_et["Nombre"]}</div>', unsafe_allow_html=True)
+                    else:
+                        st.markdown('<div class="section-title">Nueva Etapa</div>', unsafe_allow_html=True)
+
+                    with st.form("form_etapa"):
+                        et_nombre = st.text_input("Nombre de la etapa", value=fila_et["Nombre"] if editando else "", placeholder="Ej: Cimientos, Estructura, Terminaciones…")
+                        et_desc = st.text_area("Descripción", value=fila_et["Descripcion"] if editando else "", placeholder="Describí brevemente el alcance de esta etapa", height=90)
+                        col_e1, col_e2, col_e3 = st.columns(3)
+                        estados = ["Pendiente", "En Curso", "Completado"]
+                        idx_est = estados.index(fila_et["Estado"]) if editando and fila_et["Estado"] in estados else 0
+                        et_estado = col_e1.selectbox("Estado", estados, index=idx_est)
+                        et_inicio = col_e2.date_input("Inicio", value=pd.to_datetime(fila_et["Fecha_Inicio"]).date() if editando and str(fila_et["Fecha_Inicio"]) not in ["", "nan"] else datetime.date.today())
+                        et_fin = col_e3.date_input("Fin estimado", value=pd.to_datetime(fila_et["Fecha_Fin_Est"]).date() if editando and str(fila_et["Fecha_Fin_Est"]) not in ["", "nan"] else datetime.date.today())
+                        et_pct = st.slider("Progreso (%)", 0, 100, int(float(fila_et["Progreso_Pct"])) if editando and str(fila_et["Progreso_Pct"]) not in ["", "nan"] else 0)
+                        et_plano = st.text_input("Link a plano (Drive / Google Docs, opcional)", value=fila_et["Plano_URL"] if editando else "", placeholder="https://drive.google.com/…")
+
+                        cols_btn = st.columns([2, 1, 1]) if editando else st.columns([3, 1])
+                        if cols_btn[0].form_submit_button("Guardar Etapa", type="primary", use_container_width=True):
+                            if et_nombre:
+                                nueva = {
+                                    "ID": fila_et["ID"] if editando else uuid.uuid4().hex,
+                                    "Nombre": et_nombre, "Descripcion": et_desc,
+                                    "Estado": et_estado, "Fecha_Inicio": et_inicio,
+                                    "Fecha_Fin_Est": et_fin, "Progreso_Pct": et_pct,
+                                    "Plano_URL": et_plano,
+                                }
+                                if editando:
+                                    idx_e = df_etapas[df_etapas["ID"] == st.session_state.etapa_a_editar].index[0]
+                                    for k, v in nueva.items(): df_etapas.at[idx_e, k] = v
+                                else:
+                                    df_etapas = pd.concat([df_etapas, pd.DataFrame([nueva])], ignore_index=True)
+                                save_data(df_etapas, ETAPAS_FILE)
+                                st.session_state.obra_modo = None
+                                st.session_state.etapa_a_editar = None
+                                st.rerun()
+                            else:
+                                st.error("El nombre es obligatorio.")
+                        if editando and cols_btn[1].form_submit_button("🗑️ Eliminar", use_container_width=True):
+                            df_etapas = df_etapas[df_etapas["ID"] != st.session_state.etapa_a_editar]
+                            save_data(df_etapas, ETAPAS_FILE)
+                            st.session_state.etapa_a_editar = None
+                            st.rerun()
+                        if cols_btn[-1].form_submit_button("Cancelar", use_container_width=True):
+                            st.session_state.obra_modo = None
+                            st.session_state.etapa_a_editar = None
+                            st.rerun()
+                else:
+                    if st.button("＋  Nueva Etapa", type="primary", use_container_width=True):
+                        st.session_state.obra_modo = "nueva_etapa"
+                        st.rerun()
+                    st.markdown("<br>", unsafe_allow_html=True)
+
+                    if df_etapas.empty:
+                        st.markdown("""
+                            <div style='text-align:center; padding:50px 20px;'>
+                                <div style='font-size:3rem; margin-bottom:14px;'>🏗️</div>
+                                <div style='font-size:1rem; font-weight:700; opacity:0.5;'>Sin etapas definidas</div>
+                                <div style='font-size:0.82rem; opacity:0.3; margin-top:6px;'>Creá la primera etapa para empezar a hacer seguimiento</div>
+                            </div>
+                        """, unsafe_allow_html=True)
+                    else:
+                        # Resumen general
+                        total_et = len(df_etapas)
+                        completadas = len(df_etapas[df_etapas["Estado"] == "Completado"])
+                        en_curso = len(df_etapas[df_etapas["Estado"] == "En Curso"])
+                        pct_global = int(df_etapas["Progreso_Pct"].astype(float).mean()) if total_et > 0 else 0
+
+                        ks1, ks2, ks3 = st.columns(3)
+                        ks1.markdown(f'<div class="kpi-card kpi-card-primary"><span class="kpi-icon">📋</span><div class="kpi-label">Etapas</div><div class="kpi-value">{total_et}</div></div>', unsafe_allow_html=True)
+                        ks2.markdown(f'<div class="kpi-card kpi-card-success"><span class="kpi-icon">✅</span><div class="kpi-label">Completadas</div><div class="kpi-value">{completadas}</div></div>', unsafe_allow_html=True)
+                        ks3.markdown(f'<div class="kpi-card kpi-card-amber"><span class="kpi-icon">📈</span><div class="kpi-label">Avance Global</div><div class="kpi-value">{pct_global}%</div></div>', unsafe_allow_html=True)
+
+                        st.markdown(f"""
+                            <div style='margin:6px 0 20px 0;'>
+                                <div style='display:flex; justify-content:space-between; font-size:0.75rem; font-weight:700; opacity:0.45; margin-bottom:5px;'>
+                                    <span>Progreso promedio de todas las etapas</span><span>{pct_global}%</span>
+                                </div>
+                                <div class='balance-bar-wrap' style='height:10px;'>
+                                    <div class='balance-bar-fill' style='width:{pct_global}%; background:linear-gradient(90deg,#4F46E5,#7C3AED);'></div>
+                                </div>
+                            </div>
+                        """, unsafe_allow_html=True)
+
+                        for _, et in df_etapas.iterrows():
+                            estado = str(et.get("Estado", "Pendiente"))
+                            badge_cls, badge_icon = ESTADO_COLORS.get(estado, ("estado-pendiente", "⏳"))
+                            prog_color = PROGRESS_COLORS.get(estado, "#94A3B8")
+                            pct = int(float(et.get("Progreso_Pct", 0)))
+                            fi = str(et.get("Fecha_Inicio", ""))
+                            ff = str(et.get("Fecha_Fin_Est", ""))
+                            fechas_html = ""
+                            if fi not in ["", "nan"]:
+                                try: fechas_html += f"📅 {pd.to_datetime(fi).strftime('%d/%m/%Y')}"
+                                except: pass
+                            if ff not in ["", "nan"]:
+                                try: fechas_html += f" → {pd.to_datetime(ff).strftime('%d/%m/%Y')}"
+                                except: pass
+                            plano_url = str(et.get("Plano_URL", ""))
+                            plano_html = f'&nbsp;&nbsp;<a href="{plano_url}" target="_blank" style="font-size:0.78rem; opacity:0.6;">📐 Ver plano</a>' if plano_url.startswith("http") else ""
+
+                            st.markdown(f"""
+                                <div class="etapa-card">
+                                    <div style='display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:6px;'>
+                                        <div>
+                                            <div class="etapa-nombre">{et['Nombre']}</div>
+                                            <div class="etapa-desc">{et.get('Descripcion','')}</div>
+                                        </div>
+                                        <span class="badge {badge_cls}">{badge_icon} {estado}</span>
+                                    </div>
+                                    <div class="etapa-progress-wrap">
+                                        <div class="etapa-progress-fill" style="width:{pct}%; background:{prog_color};"></div>
+                                    </div>
+                                    <div style='display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; opacity:0.5; margin-top:4px; flex-wrap:wrap; gap:4px;'>
+                                        <span>{fechas_html}{plano_html}</span>
+                                        <span style='font-weight:800; opacity:0.8;'>{pct}%</span>
+                                    </div>
+                                </div>
+                            """, unsafe_allow_html=True)
+                            if st.button("✏️ Editar etapa", key=f"edit_et_{et['ID']}", use_container_width=True):
+                                st.session_state.etapa_a_editar = et["ID"]
+                                st.rerun()
+
+            # ── SUBTAB 2: AVANCES ────────────────────────────────────
+            with obra_tabs[1]:
+                TAG_OPTIONS = ["Estructura", "Materiales", "Inspección", "Problema", "Hito", "Reunión", "Foto general", "Terminaciones"]
+
+                col_avance_btn, col_filtro = st.columns([2, 2])
+                with col_avance_btn:
+                    if st.button("＋  Registrar Avance", type="primary", use_container_width=True):
+                        st.session_state.obra_modo = "nuevo_avance"
+                        st.rerun()
+
+                nombres_etapas = df_etapas["Nombre"].tolist() if not df_etapas.empty else []
+                filtro_etapa = col_filtro.selectbox("Filtrar por etapa", ["Todas"] + nombres_etapas, key="filtro_et_av")
+
+                if st.session_state.obra_modo == "nuevo_avance":
+                    st.markdown("<hr class='divider'>", unsafe_allow_html=True)
+                    st.markdown('<div class="section-title">Nuevo Registro de Avance</div>', unsafe_allow_html=True)
+                    with st.form("form_avance"):
+                        av_titulo = st.text_input("Título del avance", placeholder="Ej: Colada de losa planta baja")
+                        col_av1, col_av2 = st.columns(2)
+                        av_fecha = col_av1.date_input("Fecha", datetime.date.today())
+                        av_etapa = col_av2.selectbox("Etapa relacionada", ["(Sin etapa)"] + nombres_etapas)
+                        av_detalle = st.text_area("Detalle / Observaciones", placeholder="Describí lo que se hizo, problemas encontrados, materiales usados…", height=110)
+                        av_tags = st.multiselect("Tags", TAG_OPTIONS)
+                        av_foto = st.file_uploader("Adjuntar foto o documento", type=["jpg", "jpeg", "png", "pdf", "heic"])
+                        col_sb, col_sc = st.columns(2)
+                        if col_sb.form_submit_button("Guardar Avance", type="primary", use_container_width=True):
+                            foto_url = "Sin foto"
+                            if av_foto:
+                                file_bytes = bytes(av_foto.getbuffer())
+                                nombre_foto = f"AVANCE_{av_fecha}_{av_foto.name}"
+                                if USE_GSHEETS:
+                                    try:
+                                        foto_url = upload_comprobante(file_bytes, nombre_foto, av_foto.type)
+                                    except Exception as e:
+                                        st.warning(f"No se pudo subir la foto a Drive: {e}")
+                                else:
+                                    with open(os.path.join(DIR_COMPROBANTES, nombre_foto), "wb") as f: f.write(file_bytes)
+                                    foto_url = nombre_foto
+                            nuevo_av = {
+                                "ID": uuid.uuid4().hex, "Fecha": av_fecha,
+                                "Etapa": av_etapa if av_etapa != "(Sin etapa)" else "",
+                                "Titulo": av_titulo, "Detalle": av_detalle,
+                                "Foto_URL": foto_url,
+                                "Tags": ", ".join(av_tags),
+                                "Registrado_por": st.session_state.usuario_actual,
+                            }
+                            save_data(pd.concat([df_avances, pd.DataFrame([nuevo_av])], ignore_index=True), AVANCES_FILE)
+                            st.session_state.obra_modo = None
+                            st.rerun()
+                        if col_sc.form_submit_button("Cancelar", use_container_width=True):
+                            st.session_state.obra_modo = None
+                            st.rerun()
+                    st.markdown("<hr class='divider'>", unsafe_allow_html=True)
+
+                if df_avances.empty:
+                    st.markdown("""
+                        <div style='text-align:center; padding:50px 20px;'>
+                            <div style='font-size:3rem; margin-bottom:14px;'>📸</div>
+                            <div style='font-size:1rem; font-weight:700; opacity:0.5;'>Sin registros de avance</div>
+                            <div style='font-size:0.82rem; opacity:0.3; margin-top:6px;'>Registrá el primer avance para llevar el historial de la obra</div>
+                        </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    df_av_show = df_avances.copy()
+                    df_av_show["Fecha"] = pd.to_datetime(df_av_show["Fecha"])
+                    if filtro_etapa != "Todas":
+                        df_av_show = df_av_show[df_av_show["Etapa"] == filtro_etapa]
+                    df_av_show = df_av_show.sort_values("Fecha", ascending=False)
+
+                    for _, av in df_av_show.iterrows():
+                        foto = str(av.get("Foto_URL", ""))
+                        tags_raw = str(av.get("Tags", ""))
+                        tags_list = [t.strip() for t in tags_raw.split(",") if t.strip()]
+                        tags_html = " ".join(f'<span class="badge badge-otros">{t}</span>' for t in tags_list)
+                        etapa_html = f'<span style="font-size:0.78rem; opacity:0.5;">📋 {av["Etapa"]}</span>' if av.get("Etapa") else ""
+                        foto_html = f'<br><a href="{foto}" target="_blank" style="font-size:0.82rem; color:#4F46E5; font-weight:600;">📸 Ver foto / documento</a>' if foto.startswith("http") else ""
+                        reg_html = f'<span style="font-size:0.72rem; opacity:0.35;">por {av.get("Registrado_por","")}</span>' if av.get("Registrado_por") else ""
+
+                        st.markdown(f"""
+                            <div class="avance-card">
+                                <div style='display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:4px; margin-bottom:2px;'>
+                                    <div>
+                                        <div class="avance-fecha">{av['Fecha'].strftime('%d %b %Y').upper()} {etapa_html}</div>
+                                        <div class="avance-titulo">{av.get('Titulo','Sin título')}</div>
+                                    </div>
+                                    {reg_html}
+                                </div>
+                                <div class="avance-detalle">{av.get('Detalle','')}</div>
+                                {foto_html}
+                                <div style='margin-top:10px; display:flex; gap:6px; flex-wrap:wrap;'>{tags_html}</div>
+                            </div>
+                        """, unsafe_allow_html=True)
+                        if es_admin:
+                            if st.button("🗑️ Eliminar", key=f"del_av_{av['ID']}", use_container_width=True):
+                                save_data(df_avances[df_avances["ID"] != av["ID"]], AVANCES_FILE)
+                                st.rerun()
+
+            # ── SUBTAB 3: PLANOS ─────────────────────────────────────
+            with obra_tabs[2]:
+                TIPO_PLANO = ["Arquitectura", "Estructura", "Instalaciones", "Paisajismo", "Otro"]
+
+                if st.button("＋  Agregar Plano / Documento", type="primary", use_container_width=True):
+                    st.session_state.obra_modo = "nuevo_plano"
+                    st.rerun()
+
+                if st.session_state.obra_modo == "nuevo_plano":
+                    st.markdown("<hr class='divider'>", unsafe_allow_html=True)
+                    st.markdown('<div class="section-title">Agregar Plano o Documento</div>', unsafe_allow_html=True)
+                    with st.form("form_plano"):
+                        pl_nombre = st.text_input("Nombre del plano", placeholder="Ej: Planta Baja – Rev. 3")
+                        pl_desc = st.text_input("Descripción breve", placeholder="Ej: Distribución y cotas planta baja")
+                        col_pl1, col_pl2, col_pl3 = st.columns(3)
+                        pl_tipo = col_pl1.selectbox("Tipo", TIPO_PLANO)
+                        pl_version = col_pl2.text_input("Versión / Rev.", placeholder="v1, Rev.2…")
+                        pl_fecha = col_pl3.date_input("Fecha", datetime.date.today())
+                        pl_url = st.text_input("URL del documento (Drive, Google Docs, etc.)", placeholder="https://drive.google.com/…")
+                        pl_archivo = st.file_uploader("O subir archivo directamente", type=["pdf", "png", "jpg", "dwg", "dxf"])
+                        col_ps, col_pc = st.columns(2)
+                        if col_ps.form_submit_button("Guardar Plano", type="primary", use_container_width=True):
+                            url_final = pl_url.strip()
+                            if pl_archivo and not url_final.startswith("http"):
+                                file_bytes = bytes(pl_archivo.getbuffer())
+                                nombre_arch = f"PLANO_{pl_fecha}_{pl_archivo.name}"
+                                if USE_GSHEETS:
+                                    try:
+                                        url_final = upload_comprobante(file_bytes, nombre_arch, pl_archivo.type)
+                                    except Exception as e:
+                                        st.warning(f"No se pudo subir a Drive: {e}")
+                                else:
+                                    with open(os.path.join(DIR_COMPROBANTES, nombre_arch), "wb") as f: f.write(file_bytes)
+                                    url_final = nombre_arch
+                            if pl_nombre:
+                                nuevo_pl = {
+                                    "ID": uuid.uuid4().hex, "Nombre": pl_nombre,
+                                    "Descripcion": pl_desc, "Version": pl_version,
+                                    "Fecha": pl_fecha, "URL": url_final, "Tipo": pl_tipo,
+                                }
+                                save_data(pd.concat([df_planos, pd.DataFrame([nuevo_pl])], ignore_index=True), PLANOS_FILE)
+                                st.session_state.obra_modo = None
+                                st.rerun()
+                            else:
+                                st.error("El nombre del plano es obligatorio.")
+                        if col_pc.form_submit_button("Cancelar", use_container_width=True):
+                            st.session_state.obra_modo = None
+                            st.rerun()
+                    st.markdown("<hr class='divider'>", unsafe_allow_html=True)
+
+                if df_planos.empty:
+                    st.markdown("""
+                        <div style='text-align:center; padding:50px 20px;'>
+                            <div style='font-size:3rem; margin-bottom:14px;'>📐</div>
+                            <div style='font-size:1rem; font-weight:700; opacity:0.5;'>Sin planos cargados</div>
+                            <div style='font-size:0.82rem; opacity:0.3; margin-top:6px;'>Agregá planos y documentos técnicos del proyecto</div>
+                        </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    TIPO_ICONS = {"Arquitectura":"🏛️", "Estructura":"🔩", "Instalaciones":"⚡", "Paisajismo":"🌿", "Otro":"📄"}
+                    df_planos["Fecha"] = pd.to_datetime(df_planos["Fecha"])
+                    for tipo_grp, grp in df_planos.sort_values("Fecha", ascending=False).groupby("Tipo", sort=False):
+                        icono = TIPO_ICONS.get(tipo_grp, "📄")
+                        st.markdown(f'<div class="section-title">{icono} {tipo_grp}</div>', unsafe_allow_html=True)
+                        for _, pl in grp.iterrows():
+                            url = str(pl.get("URL",""))
+                            ver = str(pl.get("Version",""))
+                            ver_html = f'<span class="badge badge-mat">{ver}</span>&nbsp;' if ver else ""
+                            link_html = f'<a href="{url}" target="_blank" style="font-size:0.82rem; color:#4F46E5; font-weight:600;">🔗 Abrir</a>' if url.startswith("http") else '<span style="font-size:0.78rem; opacity:0.3;">Sin link</span>'
+                            st.markdown(f"""
+                                <div class="avance-card" style='display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;'>
+                                    <div>
+                                        <div style='font-size:0.7rem; opacity:0.4; text-transform:uppercase; letter-spacing:0.8px; font-weight:700;'>{pl['Fecha'].strftime('%d/%m/%Y')}</div>
+                                        <div style='font-size:0.95rem; font-weight:800; margin:3px 0;'>{ver_html}{pl['Nombre']}</div>
+                                        <div style='font-size:0.8rem; opacity:0.5;'>{pl.get('Descripcion','')}</div>
+                                    </div>
+                                    <div style='display:flex; align-items:center; gap:10px;'>{link_html}</div>
+                                </div>
+                            """, unsafe_allow_html=True)
+                            if es_admin:
+                                if st.button("🗑️ Eliminar", key=f"del_pl_{pl['ID']}", use_container_width=True):
+                                    save_data(df_planos[df_planos["ID"] != pl["ID"]], PLANOS_FILE)
+                                    st.rerun()
+
+        # --- PESTAÑA 5: ADMIN ---
         if es_admin:
-            with tabs[3]:
+            with tabs[4]:
                 st.markdown('<div class="section-title">Importar Gastos desde Google Sheet</div>', unsafe_allow_html=True)
                 st.caption("Compartí la hoja origen con el `client_email` de tu cuenta de servicio antes de importar.")
                 with st.form("import_form"):
