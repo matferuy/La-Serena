@@ -195,10 +195,20 @@ def get_drive_service():
     return build('drive', 'v3', credentials=creds)
 
 def get_drive_folder_id():
-    # Usa la carpeta configurada en secrets (debe ser compartida con la SA)
+    # Intenta top-level primero, luego busca en secciones anidadas
     if "drive_folder_id" in st.secrets:
-        return st.secrets["drive_folder_id"]
-    raise ValueError("Configurá 'drive_folder_id' en los Secrets de Streamlit Cloud. Creá una carpeta en tu Drive, compartila con el client_email de la cuenta de servicio (Editor), y pegá el ID aquí.")
+        return str(st.secrets["drive_folder_id"]).strip()
+    # Busca en secciones anidadas (por si el usuario puso la key bajo [gcp_service_account] u otra sección)
+    for section_key in st.secrets:
+        try:
+            section = st.secrets[section_key]
+            if hasattr(section, '__getitem__') and "drive_folder_id" in section:
+                return str(section["drive_folder_id"]).strip()
+        except Exception:
+            pass
+    # Armar mensaje útil con las keys disponibles
+    available = list(st.secrets.keys())
+    raise ValueError(f"No se encontró 'drive_folder_id' en los Secrets. Keys disponibles: {available}. Asegurate de que esté al nivel raíz del TOML, no dentro de una sección.")
 
 def upload_comprobante(file_bytes, filename, mimetype):
     service = get_drive_service()
@@ -739,6 +749,19 @@ else:
                                     st.warning("No se encontraron filas con monto válido.")
                         except Exception as e:
                             st.error(f"Error: {e}")
+
+                st.markdown("---")
+                with st.expander("🔑 Diagnóstico de Secrets", expanded=False):
+                    st.caption("Keys cargadas en st.secrets (sin mostrar valores):")
+                    keys_top = list(st.secrets.keys())
+                    st.code("\n".join(keys_top))
+                    drive_ok = "drive_folder_id" in st.secrets
+                    oauth_ok = "google_oauth_refresh_token" in st.secrets
+                    st.write(f"- `drive_folder_id` encontrado: {'✅' if drive_ok else '❌'}")
+                    st.write(f"- `google_oauth_refresh_token` encontrado: {'✅' if oauth_ok else '❌'}")
+                    if drive_ok:
+                        fid = str(st.secrets["drive_folder_id"]).strip()
+                        st.write(f"- Valor de `drive_folder_id` (primeros 10 chars): `{fid[:10]}...`")
 
                 st.markdown("---")
                 st.markdown("#### 💾 Respaldo de Datos")
