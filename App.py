@@ -182,22 +182,11 @@ def get_drive_service():
     )
     return build('drive', 'v3', credentials=creds)
 
-@st.cache_data(ttl=3600)
 def get_drive_folder_id():
-    service = get_drive_service()
-    q = f"name='{DRIVE_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
-    results = service.files().list(q=q, fields="files(id)").execute()
-    files = results.get('files', [])
-    if files:
-        return files[0]['id']
-    folder = service.files().create(
-        body={'name': DRIVE_FOLDER_NAME, 'mimeType': 'application/vnd.google-apps.folder'},
-        fields='id'
-    ).execute()
-    service.permissions().create(
-        fileId=folder['id'], body={'type': 'anyone', 'role': 'reader'}
-    ).execute()
-    return folder['id']
+    # Usa la carpeta configurada en secrets (debe ser compartida con la SA)
+    if "drive_folder_id" in st.secrets:
+        return st.secrets["drive_folder_id"]
+    raise ValueError("Configurá 'drive_folder_id' en los Secrets de Streamlit Cloud. Creá una carpeta en tu Drive, compartila con el client_email de la cuenta de servicio (Editor), y pegá el ID aquí.")
 
 def upload_comprobante(file_bytes, filename, mimetype):
     service = get_drive_service()
