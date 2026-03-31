@@ -1152,8 +1152,8 @@ else:
                         ks1, ks2, ks3, ks4 = st.columns(4)
                         ks1.markdown(f'<div class="kpi-card kpi-card-primary"><span class="kpi-icon">📋</span><div class="kpi-label">Etapas</div><div class="kpi-value">{total_et}</div></div>', unsafe_allow_html=True)
                         ks2.markdown(f'<div class="kpi-card kpi-card-success"><span class="kpi-icon">✅</span><div class="kpi-label">Completadas</div><div class="kpi-value">{completadas}</div></div>', unsafe_allow_html=True)
-                        ks3.markdown(f'<div class="kpi-card kpi-card-neutral"><span class="kpi-icon">💰</span><div class="kpi-label">Presupuesto</div><div class="kpi-value" style="font-size:1.3rem;">${presup_total:,.0f}</div></div>', unsafe_allow_html=True)
-                        ks4.markdown(f'<div class="kpi-card kpi-card-amber"><span class="kpi-icon">🧾</span><div class="kpi-label">Ejecutado</div><div class="kpi-value" style="font-size:1.3rem;">${real_total:,.0f}</div></div>', unsafe_allow_html=True)
+                        ks3.markdown(f'<div class="kpi-card kpi-card-neutral"><span class="kpi-icon">💰</span><div class="kpi-label">Presupuesto</div><div class="kpi-value" style="font-size:1.3rem;">U$S {presup_total:,.0f}</div></div>', unsafe_allow_html=True)
+                        ks4.markdown(f'<div class="kpi-card kpi-card-amber"><span class="kpi-icon">🧾</span><div class="kpi-label">Ejecutado</div><div class="kpi-value" style="font-size:1.3rem;">U$S {real_total:,.0f}</div></div>', unsafe_allow_html=True)
 
                         # Renderizar etapas con jerarquía
                         top_etapas = df_etapas[df_etapas["Parent_ID"].astype(str).str.strip() == ""]
@@ -1176,8 +1176,8 @@ else:
                             plano_url = str(et.get("Plano_URL", ""))
                             plano_html = f'&nbsp;&nbsp;<a href="{plano_url}" target="_blank" style="font-size:0.78rem; opacity:0.6;">📐 Ver plano</a>' if plano_url.startswith("http") else ""
                             color_real = "#DC2626" if (real > presup and presup > 0) else "#059669"
-                            presup_html = f'<span style="font-size:0.78rem;opacity:0.55;">💰 ${presup:,.0f}</span>' if presup > 0 else ""
-                            real_html = f'<span style="font-size:0.78rem;opacity:0.55;color:{color_real};">🧾 ${real:,.0f}</span>' if real > 0 else ""
+                            presup_html = f'<span style="font-size:0.78rem;opacity:0.55;">💰 U$S {presup:,.0f}</span>' if presup > 0 else ""
+                            real_html = f'<span style="font-size:0.78rem;opacity:0.55;color:{color_real};">🧾 U$S {real:,.0f}</span>' if real > 0 else ""
                             et_html = (
                                 f'<div class="etapa-card">'
                                 f'<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:6px;">'
@@ -1219,8 +1219,8 @@ else:
                                 ch_presup = float(ch.get("Presupuesto_UYU", 0))
                                 ch_real = reales.get(ch["ID"], 0)
                                 ch_color_real = "#DC2626" if (ch_real > ch_presup and ch_presup > 0) else "#059669"
-                                ch_presup_html = f'<span style="font-size:0.75rem;opacity:0.5;">💰 ${ch_presup:,.0f}</span>' if ch_presup > 0 else ""
-                                ch_real_html = f'<span style="font-size:0.75rem;opacity:0.5;color:{ch_color_real};">🧾 ${ch_real:,.0f}</span>' if ch_real > 0 else ""
+                                ch_presup_html = f'<span style="font-size:0.75rem;opacity:0.5;">💰 U$S {ch_presup:,.0f}</span>' if ch_presup > 0 else ""
+                                ch_real_html = f'<span style="font-size:0.75rem;opacity:0.5;color:{ch_color_real};">🧾 U$S {ch_real:,.0f}</span>' if ch_real > 0 else ""
                                 ch_html = (
                                     f'<div style="margin-left:18px;margin-bottom:8px;">'
                                     f'<div class="etapa-card" style="border-left:3px solid rgba(79,70,229,0.3);">'
@@ -1257,11 +1257,11 @@ else:
                 pct_ejec = (total_real / total_pres * 100) if total_pres > 0 else 0
 
                 kc1, kc2, kc3 = st.columns(3)
-                kc1.markdown(f'<div class="kpi-card kpi-card-primary"><span class="kpi-icon">💰</span><div class="kpi-label">Presupuesto Total</div><div class="kpi-value" style="font-size:1.5rem;">${total_pres:,.0f}</div><div class="kpi-sub">USD</div></div>', unsafe_allow_html=True)
-                kc2.markdown(f'<div class="kpi-card kpi-card-amber"><span class="kpi-icon">🧾</span><div class="kpi-label">Ejecutado Real</div><div class="kpi-value" style="font-size:1.5rem;">${total_real:,.0f}</div><div class="kpi-sub">{pct_ejec:.1f}% del presupuesto</div></div>', unsafe_allow_html=True)
+                kc1.markdown(f'<div class="kpi-card kpi-card-primary"><span class="kpi-icon">💰</span><div class="kpi-label">Presupuesto Total</div><div class="kpi-value" style="font-size:1.5rem;">U$S {total_pres:,.0f}</div></div>', unsafe_allow_html=True)
+                kc2.markdown(f'<div class="kpi-card kpi-card-amber"><span class="kpi-icon">🧾</span><div class="kpi-label">Ejecutado Real</div><div class="kpi-value" style="font-size:1.5rem;">U$S {total_real:,.0f}</div><div class="kpi-sub">{pct_ejec:.1f}% del presupuesto</div></div>', unsafe_allow_html=True)
                 color_dif = "kpi-card-success" if diferencia >= 0 else "kpi-card-amber"
                 label_dif = "Disponible" if diferencia >= 0 else "Excedido"
-                kc3.markdown(f'<div class="kpi-card {color_dif}"><span class="kpi-icon">{"✅" if diferencia >= 0 else "⚠️"}</span><div class="kpi-label">{label_dif}</div><div class="kpi-value" style="font-size:1.5rem;">${abs(diferencia):,.0f}</div></div>', unsafe_allow_html=True)
+                kc3.markdown(f'<div class="kpi-card {color_dif}"><span class="kpi-icon">{"✅" if diferencia >= 0 else "⚠️"}</span><div class="kpi-label">{label_dif}</div><div class="kpi-value" style="font-size:1.5rem;">U$S {abs(diferencia):,.0f}</div></div>', unsafe_allow_html=True)
 
                 st.markdown(f"""
                     <div style='margin:6px 0 22px 0;'>
@@ -1284,9 +1284,9 @@ else:
                     pct = (real / pres * 100) if pres > 0 else 0
                     rows_costeo.append({
                         "Rubrado": et["Nombre"],
-                        "Presupuesto $": f"${pres:,.0f}",
-                        "Ejecutado $": f"${real:,.0f}",
-                        "Diferencia $": f"${dif:,.0f}",
+                        "Presupuesto $": f"U$S {pres:,.0f}",
+                        "Ejecutado $": f"U$S {real:,.0f}",
+                        "Diferencia $": f"U$S {dif:,.0f}",
                         "% Ejec.": f"{pct:.0f}%",
                         "_pct": pct, "_ok": dif >= 0,
                     })
