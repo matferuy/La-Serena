@@ -1122,27 +1122,29 @@ else:
                                 except: pass
                             plano_url = str(et.get("Plano_URL", ""))
                             plano_html = f'&nbsp;&nbsp;<a href="{plano_url}" target="_blank" style="font-size:0.78rem; opacity:0.6;">📐 Ver plano</a>' if plano_url.startswith("http") else ""
-                            presup_html = f'<span style="font-size:0.78rem; opacity:0.55;">💰 ${presup:,.0f}</span>' if presup > 0 else ""
-                            real_html = f'<span style="font-size:0.78rem; opacity:0.55; color:{"#DC2626" if real > presup and presup > 0 else "#059669"};">🧾 ${real:,.0f}</span>' if real > 0 else ""
-
-                            st.markdown(f"""
-                                <div class="etapa-card">
-                                    <div style='display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:6px;'>
-                                        <div>
-                                            <div class="etapa-nombre">{et['Nombre']}</div>
-                                            <div class="etapa-desc">{et.get('Descripcion','')}</div>
-                                        </div>
-                                        <span class="badge {badge_cls}">{badge_icon} {estado}</span>
-                                    </div>
-                                    <div class="etapa-progress-wrap">
-                                        <div class="etapa-progress-fill" style="width:{pct}%; background:{prog_color};"></div>
-                                    </div>
-                                    <div style='display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; opacity:0.5; margin-top:6px; flex-wrap:wrap; gap:6px;'>
-                                        <span style='display:flex;gap:12px;'>{presup_html}{real_html}</span>
-                                        <span style='display:flex;gap:10px;'><span>{fechas_html}</span>{plano_html}<span style='font-weight:800; opacity:0.8;'>{pct}%</span></span>
-                                    </div>
-                                </div>
-                            """, unsafe_allow_html=True)
+                            color_real = "#DC2626" if (real > presup and presup > 0) else "#059669"
+                            presup_html = f'<span style="font-size:0.78rem;opacity:0.55;">💰 ${presup:,.0f}</span>' if presup > 0 else ""
+                            real_html = f'<span style="font-size:0.78rem;opacity:0.55;color:{color_real};">🧾 ${real:,.0f}</span>' if real > 0 else ""
+                            et_html = (
+                                f'<div class="etapa-card">'
+                                f'<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:6px;">'
+                                f'<div>'
+                                f'<div class="etapa-nombre">{et["Nombre"]}</div>'
+                                f'<div class="etapa-desc">{et.get("Descripcion","")}</div>'
+                                f'</div>'
+                                f'<span class="badge {badge_cls}">{badge_icon} {estado}</span>'
+                                f'</div>'
+                                f'<div class="etapa-progress-wrap">'
+                                f'<div class="etapa-progress-fill" style="width:{pct}%;background:{prog_color};"></div>'
+                                f'</div>'
+                                f'<div style="display:flex;justify-content:space-between;align-items:center;font-size:0.75rem;opacity:0.5;margin-top:6px;flex-wrap:wrap;gap:6px;">'
+                                f'<span style="display:flex;gap:12px;">{presup_html}{real_html}</span>'
+                                f'<span style="display:flex;gap:10px;"><span>{fechas_html}</span>{plano_html}'
+                                f'<span style="font-weight:800;opacity:0.8;">{pct}%</span></span>'
+                                f'</div>'
+                                f'</div>'
+                            )
+                            st.markdown(et_html, unsafe_allow_html=True)
                             if st.button("✏️ Editar", key=f"edit_et_{et['ID']}", use_container_width=True):
                                 st.session_state.etapa_a_editar = et["ID"]
                                 st.rerun()
@@ -1156,28 +1158,30 @@ else:
                                 ch_pct = int(float(ch.get("Progreso_Pct", 0)))
                                 ch_presup = float(ch.get("Presupuesto_UYU", 0))
                                 ch_real = reales.get(ch["ID"], 0)
-                                ch_presup_html = f'<span style="font-size:0.75rem; opacity:0.5;">💰 ${ch_presup:,.0f}</span>' if ch_presup > 0 else ""
-                                ch_real_html = f'<span style="font-size:0.75rem; opacity:0.5; color:{"#DC2626" if ch_real > ch_presup and ch_presup > 0 else "#059669"};">🧾 ${ch_real:,.0f}</span>' if ch_real > 0 else ""
-                                st.markdown(f"""
-                                    <div style='margin-left:18px; margin-bottom:8px;'>
-                                        <div class="etapa-card" style='border-left:3px solid rgba(79,70,229,0.3);'>
-                                            <div style='display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:4px;'>
-                                                <div>
-                                                    <div style='font-size:0.78rem; opacity:0.4; font-weight:700; margin-bottom:2px;'>└ sub-etapa</div>
-                                                    <div class="etapa-nombre" style='font-size:0.95rem;'>{ch['Nombre']}</div>
-                                                </div>
-                                                <span class="badge {ch_badge_cls}">{ch_badge_icon} {ch_estado}</span>
-                                            </div>
-                                            <div class="etapa-progress-wrap" style='margin-top:10px;'>
-                                                <div class="etapa-progress-fill" style="width:{ch_pct}%; background:{ch_prog_color};"></div>
-                                            </div>
-                                            <div style='display:flex; gap:12px; font-size:0.75rem; margin-top:5px; flex-wrap:wrap;'>
-                                                {ch_presup_html}{ch_real_html}
-                                                <span style='font-weight:800; opacity:0.6; margin-left:auto;'>{ch_pct}%</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                """, unsafe_allow_html=True)
+                                ch_color_real = "#DC2626" if (ch_real > ch_presup and ch_presup > 0) else "#059669"
+                                ch_presup_html = f'<span style="font-size:0.75rem;opacity:0.5;">💰 ${ch_presup:,.0f}</span>' if ch_presup > 0 else ""
+                                ch_real_html = f'<span style="font-size:0.75rem;opacity:0.5;color:{ch_color_real};">🧾 ${ch_real:,.0f}</span>' if ch_real > 0 else ""
+                                ch_html = (
+                                    f'<div style="margin-left:18px;margin-bottom:8px;">'
+                                    f'<div class="etapa-card" style="border-left:3px solid rgba(79,70,229,0.3);">'
+                                    f'<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:4px;">'
+                                    f'<div>'
+                                    f'<div style="font-size:0.78rem;opacity:0.4;font-weight:700;margin-bottom:2px;">└ sub-etapa</div>'
+                                    f'<div class="etapa-nombre" style="font-size:0.95rem;">{ch["Nombre"]}</div>'
+                                    f'</div>'
+                                    f'<span class="badge {ch_badge_cls}">{ch_badge_icon} {ch_estado}</span>'
+                                    f'</div>'
+                                    f'<div class="etapa-progress-wrap" style="margin-top:10px;">'
+                                    f'<div class="etapa-progress-fill" style="width:{ch_pct}%;background:{ch_prog_color};"></div>'
+                                    f'</div>'
+                                    f'<div style="display:flex;gap:12px;font-size:0.75rem;margin-top:5px;flex-wrap:wrap;">'
+                                    f'{ch_presup_html}{ch_real_html}'
+                                    f'<span style="font-weight:800;opacity:0.6;margin-left:auto;">{ch_pct}%</span>'
+                                    f'</div>'
+                                    f'</div>'
+                                    f'</div>'
+                                )
+                                st.markdown(ch_html, unsafe_allow_html=True)
                                 if st.button("✏️ Editar", key=f"edit_et_{ch['ID']}", use_container_width=True):
                                     st.session_state.etapa_a_editar = ch["ID"]
                                     st.rerun()
