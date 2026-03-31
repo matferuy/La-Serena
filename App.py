@@ -509,11 +509,17 @@ def build_etapa_options(df_etapas):
     return labels, ids
 
 def real_por_etapa(df_gastos, df_etapas):
-    """Devuelve dict {etapa_id: monto_real_UYU} incluyendo suma de sub-etapas en padres."""
+    """Devuelve dict {etapa_id: monto_real_USD} incluyendo suma de sub-etapas en padres."""
     if df_gastos.empty:
         return {}
-    gastos_et = df_gastos[df_gastos["Etapa_ID"].astype(str).str.strip() != ""]
-    directos = gastos_et.groupby("Etapa_ID")["Monto_UYU"].sum().to_dict()
+    gastos_et = df_gastos[df_gastos["Etapa_ID"].astype(str).str.strip() != ""].copy()
+    # Convertir todo a USD para comparar con presupuesto (que está en USD)
+    gastos_et["Monto_USD"] = gastos_et.apply(
+        lambda r: r["Monto_Original"] if str(r.get("Moneda", "")).upper() == "USD"
+                  else r["Monto_Original"] / max(float(r.get("Tasa_Cambio", 1) or 1), 1),
+        axis=1
+    )
+    directos = gastos_et.groupby("Etapa_ID")["Monto_USD"].sum().to_dict()
     # Propagar a padres
     totales = dict(directos)
     for _, et in df_etapas.iterrows():
