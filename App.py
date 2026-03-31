@@ -1265,6 +1265,51 @@ else:
                                     st.session_state.obra_modo = None
                                     st.rerun()
 
+                        # ── Gastos sin etapa asignada ──────────────────
+                        gastos_sin = df_gastos[df_gastos["Etapa_ID"].astype(str).str.strip() == ""] if not df_gastos.empty else pd.DataFrame()
+                        if not gastos_sin.empty:
+                            tasa_sin = obtener_tasa_usd_uyu()
+                            gastos_sin = gastos_sin.copy()
+                            gastos_sin["Monto_USD"] = gastos_sin.apply(
+                                lambda r: r["Monto_Original"] if str(r.get("Moneda","")).upper() == "USD"
+                                          else r["Monto_UYU"] / tasa_sin, axis=1)
+                            total_sin = gastos_sin["Monto_USD"].sum()
+                            st.markdown(f"""
+                                <div class="etapa-card" style="border-left:3px solid #94A3B8;opacity:0.85;margin-top:18px;">
+                                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
+                                        <div>
+                                            <div class="etapa-nombre" style="opacity:0.6;">📂 No asignados</div>
+                                            <div class="etapa-desc">Gastos sin etapa · U$S {total_sin:,.0f} total</div>
+                                        </div>
+                                        <span class="badge estado-pendiente">📋 {len(gastos_sin)} gastos</span>
+                                    </div>
+                                </div>
+                            """, unsafe_allow_html=True)
+                            for _, g in gastos_sin.iterrows():
+                                monto_usd = g["Monto_USD"]
+                                moneda_orig = str(g.get("Moneda",""))
+                                monto_orig = float(g.get("Monto_Original", 0))
+                                orig_str = f"U$S {monto_orig:,.0f}" if moneda_orig.upper() == "USD" else f"$ {monto_orig:,.0f} UYU"
+                                fecha_g = str(g.get("Fecha",""))
+                                try: fecha_g = pd.to_datetime(fecha_g).strftime("%d/%m/%Y")
+                                except: pass
+                                st.markdown(f"""
+                                    <div style="margin-left:18px;margin-bottom:6px;">
+                                        <div class="etapa-card" style="padding:10px 14px;border-left:3px solid rgba(148,163,184,0.4);">
+                                            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px;">
+                                                <div>
+                                                    <div style="font-size:0.85rem;font-weight:700;">{g.get("Concepto","")}</div>
+                                                    <div style="font-size:0.75rem;opacity:0.45;">{fecha_g} · {g.get("Categoria","")} · {g.get("Pagado_por","")}</div>
+                                                </div>
+                                                <div style="font-size:0.85rem;font-weight:800;opacity:0.7;">
+                                                    U$S {monto_usd:,.0f}
+                                                    <span style="font-size:0.72rem;opacity:0.5;font-weight:400;"> ({orig_str})</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                """, unsafe_allow_html=True)
+
             # ── SUBTAB 2: COSTEO ─────────────────────────────────────
             with obra_tabs[1]:
                 reales_c = real_por_etapa(df_gastos, df_etapas)
