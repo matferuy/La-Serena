@@ -426,6 +426,13 @@ else:
             categorias = ["Materiales", "Mano de Obra", "Trámites/Permisos", "Terreno", "Otros"]
             idx_cat = categorias.index(fila_actual["Categoria"]) if fila_actual["Categoria"] in categorias else 0
             edit_categoria = st.selectbox("Categoría", categorias, index=idx_cat)
+
+            if es_admin:
+                lista_usuarios = usuarios_df["Usuario"].tolist()
+                idx_paga = lista_usuarios.index(fila_actual["Pagado_por"]) if fila_actual["Pagado_por"] in lista_usuarios else 0
+                edit_pagado_por = st.selectbox("Pagado por", lista_usuarios, index=idx_paga)
+            else:
+                edit_pagado_por = fila_actual["Pagado_por"]
             
             st.markdown("<br>", unsafe_allow_html=True)
             col_save, col_del, col_cancel = st.columns(3)
@@ -439,6 +446,7 @@ else:
                 df_gastos.at[idx_general, "Tasa_Cambio"] = edit_tasa
                 df_gastos.at[idx_general, "Monto_UYU"] = edit_monto * edit_tasa
                 df_gastos.at[idx_general, "Categoria"] = edit_categoria
+                df_gastos.at[idx_general, "Pagado_por"] = edit_pagado_por
                 save_data(df_gastos, DATA_FILE)
                 st.session_state.gasto_a_editar = None
                 st.rerun()
