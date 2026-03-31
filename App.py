@@ -194,10 +194,12 @@ def upload_comprobante(file_bytes, filename, mimetype):
     media = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype=mimetype)
     archivo = service.files().create(
         body={'name': filename, 'parents': [folder_id]},
-        media_body=media, fields='id, webViewLink'
+        media_body=media, fields='id, webViewLink',
+        supportsAllDrives=True
     ).execute()
     service.permissions().create(
-        fileId=archivo['id'], body={'type': 'anyone', 'role': 'reader'}
+        fileId=archivo['id'], body={'type': 'anyone', 'role': 'reader'},
+        supportsAllDrives=True
     ).execute()
     return archivo['webViewLink']
 
