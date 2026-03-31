@@ -237,7 +237,11 @@ PLANOS_COLS = ["ID", "Nombre", "Descripcion", "Version", "Fecha", "URL", "Tipo"]
 
 # Etapas predefinidas basadas en el presupuesto (pino, $63.300 total)
 ETAPAS_SEED = [
-    {"ID":"et_proyecto",   "Nombre":"Proyecto",               "Descripcion":"Diseño, planos y documentación del proyecto", "Estado":"En Curso",  "Presupuesto_UYU":0,     "Parent_ID":""},
+    {"ID":"et_proyecto",   "Nombre":"Proyecto",               "Descripcion":"Diseño, planos y documentación – entrama (Moreno Citraro + Martínez Vacarezza)", "Estado":"En Curso",  "Presupuesto_UYU":0, "Parent_ID":""},
+    {"ID":"et_anteproy",   "Nombre":"Anteproyecto",           "Descripcion":"Planta implantación, planos 1/100, cortes, fachadas y modelado 3D. Pago: 50% al confirmar, 50% al entregar planos. USD 500", "Estado":"En Curso",  "Presupuesto_UYU":500,  "Parent_ID":"et_proyecto"},
+    {"ID":"et_proy_ejec",  "Nombre":"Proyecto Ejecutivo",     "Descripcion":"Planos de albañilería, estructura, sanitaria y eléctrica. Planillado de carpintería, baños y cocinas. Pago: 50% al confirmar, 50% al entregar. USD 1.000", "Estado":"Pendiente", "Presupuesto_UYU":1000, "Parent_ID":"et_proyecto"},
+    {"ID":"et_docs_obra",  "Nombre":"Documentos para la Obra","Descripcion":"Permiso Intendencia Rocha, ingreso BPS, trámite Catastro. Pago: 50% confirmar, 30% al presentar, 20% tras aprobación. USD 750 + IVA", "Estado":"Pendiente", "Presupuesto_UYU":750,  "Parent_ID":"et_proyecto"},
+    {"ID":"et_seg_arq",    "Nombre":"Seguimiento Arquitectónico","Descripcion":"Seguimiento de obra + final de obra ante Intendencia. Incluye ajuste de gráficos si el metraje cambia. A cotizar al finalizar proyecto.", "Estado":"Pendiente", "Presupuesto_UYU":0,    "Parent_ID":"et_proyecto"},
     {"ID":"et_vivienda",   "Nombre":"Vivienda",                "Descripcion":"Estructura de la vivienda – 61m² (pino)",      "Estado":"Pendiente", "Presupuesto_UYU":42700, "Parent_ID":""},
     {"ID":"et_pb",         "Nombre":"Planta Baja",             "Descripcion":"46 m² × $700/m²",                             "Estado":"Pendiente", "Presupuesto_UYU":32200, "Parent_ID":"et_vivienda"},
     {"ID":"et_pa",         "Nombre":"Planta Alta",             "Descripcion":"15 m² × $700/m²",                             "Estado":"Pendiente", "Presupuesto_UYU":10500, "Parent_ID":"et_vivienda"},
