@@ -140,6 +140,41 @@ def save_df_to_sheet(df, sheet_name):
 DRIVE_FOLDER_NAME = "La Serena - Comprobantes"
 
 @st.cache_resource
+def get_sheets_service():
+    creds = Credentials.from_service_account_info(
+        st.secrets["gcp_service_account"],
+        scopes=["https://www.googleapis.com/auth/spreadsheets"]
+    )
+    return build('sheets', 'v4', credentials=creds)
+
+def extraer_hyperlinks(spreadsheet_id, sheet_name):
+    """Devuelve dict {fila_idx: url} con los hyperlinks de todas las celdas."""
+    service = get_sheets_service()
+    result = service.spreadsheets().get(
+        spreadsheetId=spreadsheet_id,
+        ranges=[f"'{sheet_name}'"],
+        includeGridData=True
+    ).execute()
+    links = {}
+    try:
+        rows = result['sheets'][0]['data'][0]['rowData']
+        for r_idx, row in enumerate(rows):
+            row_links = {}
+            for c_idx, cell in enumerate(row.get('values', [])):
+                url = cell.get('hyperlink', '')
+                if not url:
+                    for run in cell.get('textFormatRuns', []):
+                        url = run.get('format', {}).get('link', {}).get('uri', '')
+                        if url: break
+                if url:
+                    row_links[c_idx] = url
+            if row_links:
+                links[r_idx] = row_links
+    except (KeyError, IndexError):
+        pass
+    return links
+
+@st.cache_resource
 def get_drive_service():
     creds = Credentials.from_service_account_info(
         st.secrets["gcp_service_account"],
@@ -658,13 +693,16 @@ else:
                             if header_row is None:
                                 st.error("No se encontró encabezado 'Concepto' en la hoja.")
                             else:
+                                # Extraer todos los hyperlinks de la hoja
+                                all_links = extraer_hyperlinks(src_id.strip(), src_hoja.strip())
                                 headers = all_values[header_row]
                                 df_src = pd.DataFrame(all_values[header_row+1:], columns=headers)
                                 df_src = df_src[df_src["Concepto"].str.strip() != ""]
                                 df_src = df_src[~df_src["Concepto"].str.upper().str.contains("TOTAL")]
+                                df_src = df_src.reset_index(drop=True)
                                 tasa = obtener_tasa_usd_uyu()
                                 nuevos = []
-                                for _, row in df_src.iterrows():
+                                for i, row in df_src.iterrows():
                                     moneda = str(row.get("Moneda", "UYU")).strip() or "UYU"
                                     try:
                                         monto = float(str(row.get("Monto", "0")).replace(",", ".").strip())
@@ -673,6 +711,10 @@ else:
                                     if monto <= 0:
                                         continue
                                     tasa_row = tasa if moneda == "USD" else 1.0
+                                    # Buscar hyperlinks en la fila (índice real en la hoja)
+                                    sheet_row = header_row + 1 + i
+                                    row_links = all_links.get(sheet_row, {})
+                                    adjunto = next(iter(row_links.values()), "Sin adjunto")
                                     nuevos.append({
                                         "ID": uuid.uuid4().hex,
                                         "Fecha": fecha_import,
@@ -683,7 +725,7 @@ else:
                                         "Monto_UYU": monto * tasa_row,
                                         "Pagado_por": str(row.get("Paga", "")).strip() or "admin",
                                         "Categoria": cat_import,
-                                        "Archivo_Adjunto": "Sin adjunto",
+                                        "Archivo_Adjunto": adjunto,
                                         "Modificado_por_Admin": True
                                     })
                                 if nuevos:
