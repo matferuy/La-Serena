@@ -439,10 +439,15 @@ else:
                 edit_pagado_por = st.selectbox("Pagado por", lista_usuarios, index=idx_paga)
             else:
                 edit_pagado_por = fila_actual["Pagado_por"]
-            
+
+            adjunto_actual = str(fila_actual.get("Archivo_Adjunto", "Sin adjunto"))
+            if adjunto_actual.startswith("https://"):
+                st.markdown(f"📎 Comprobante actual: [ver archivo]({adjunto_actual})")
+            edit_archivo = st.file_uploader("Reemplazar comprobante", type=["pdf", "png", "jpg", "jpeg"])
+
             st.markdown("<br>", unsafe_allow_html=True)
             col_save, col_del, col_cancel = st.columns(3)
-            
+
             if col_save.button("Guardar", type="primary", use_container_width=True):
                 idx_general = df_gastos[df_gastos["ID"] == id_seleccionado].index[0]
                 df_gastos.at[idx_general, "Fecha"] = edit_fecha
@@ -453,6 +458,17 @@ else:
                 df_gastos.at[idx_general, "Monto_UYU"] = edit_monto * edit_tasa
                 df_gastos.at[idx_general, "Categoria"] = edit_categoria
                 df_gastos.at[idx_general, "Pagado_por"] = edit_pagado_por
+                if edit_archivo:
+                    file_bytes = bytes(edit_archivo.getbuffer())
+                    nombre_archivo = f"GASTO_{edit_fecha}_{edit_archivo.name}"
+                    if USE_GSHEETS:
+                        try:
+                            nombre_archivo = upload_comprobante(file_bytes, nombre_archivo, edit_archivo.type)
+                        except Exception as e:
+                            st.warning(f"No se pudo subir a Drive: {e}")
+                    else:
+                        with open(os.path.join(DIR_COMPROBANTES, nombre_archivo), "wb") as f: f.write(file_bytes)
+                    df_gastos.at[idx_general, "Archivo_Adjunto"] = nombre_archivo
                 save_data(df_gastos, DATA_FILE)
                 st.session_state.gasto_a_editar = None
                 st.rerun()
@@ -472,11 +488,35 @@ else:
     # =========================================================
     elif st.session_state.transfer_a_editar is not None:
         id_transf = st.session_state.transfer_a_editar
+        fila_transf = df_transfers[df_transfers["ID"] == id_transf].iloc[0]
         st.markdown("### ✏️ Gestionar Transferencia")
-        st.warning("Para modificar montos u origen/destino, elimina este registro y crea uno nuevo.")
-        
+        st.warning("Para modificar montos u origen/destino, eliminá este registro y creá uno nuevo.")
+
+        adjunto_transf = str(fila_transf.get("Archivo_Adjunto", "Sin adjunto"))
+        if adjunto_transf.startswith("https://"):
+            st.markdown(f"📎 Comprobante actual: [ver archivo]({adjunto_transf})")
+        edit_archivo_transf = st.file_uploader("Adjuntar comprobante", type=["pdf", "png", "jpg", "jpeg"])
+
+        if edit_archivo_transf:
+            if st.button("Guardar comprobante", type="primary", use_container_width=True):
+                file_bytes = bytes(edit_archivo_transf.getbuffer())
+                nombre_archivo = f"TRANSF_{edit_archivo_transf.name}"
+                if USE_GSHEETS:
+                    try:
+                        nombre_archivo = upload_comprobante(file_bytes, nombre_archivo, edit_archivo_transf.type)
+                    except Exception as e:
+                        st.warning(f"No se pudo subir a Drive: {e}")
+                else:
+                    with open(os.path.join(DIR_COMPROBANTES, nombre_archivo), "wb") as f: f.write(file_bytes)
+                idx_t = df_transfers[df_transfers["ID"] == id_transf].index[0]
+                df_transfers.at[idx_t, "Archivo_Adjunto"] = nombre_archivo
+                save_data(df_transfers, TRANSFERS_FILE)
+                st.session_state.transfer_a_editar = None
+                st.rerun()
+
+        st.markdown("<br>", unsafe_allow_html=True)
         col_del, col_cancel = st.columns(2)
-        if col_del.button("🗑️ Eliminar Transferencia", type="primary", use_container_width=True):
+        if col_del.button("🗑️ Eliminar Transferencia", use_container_width=True):
             df_transfers = df_transfers[df_transfers["ID"] != id_transf]
             save_data(df_transfers, TRANSFERS_FILE)
             st.session_state.transfer_a_editar = None
