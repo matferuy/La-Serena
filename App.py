@@ -514,16 +514,19 @@ def real_por_etapa(df_gastos, df_etapas, tasa_usd=None):
         return {}
     if tasa_usd is None or tasa_usd <= 0:
         tasa_usd = obtener_tasa_usd_uyu()
-    gastos_et = df_gastos[df_gastos["Etapa_ID"].astype(str).str.strip() != ""].copy()
-    # Convertir todo a USD para comparar con presupuesto (que está en USD)
-    # - Gastos USD: usar Monto_Original directamente
-    # - Gastos UYU: dividir Monto_UYU por la tasa de cambio actual
-    gastos_et["Monto_USD"] = gastos_et.apply(
+    df_all = df_gastos.copy()
+    df_all["Monto_USD"] = df_all.apply(
         lambda r: r["Monto_Original"] if str(r.get("Moneda", "")).upper() == "USD"
                   else r["Monto_UYU"] / tasa_usd,
         axis=1
     )
+    # Gastos con etapa asignada
+    gastos_et = df_all[df_all["Etapa_ID"].astype(str).str.strip() != ""]
     directos = gastos_et.groupby("Etapa_ID")["Monto_USD"].sum().to_dict()
+    # Gastos sin etapa → clave especial "_sin_etapa"
+    gastos_sin = df_all[df_all["Etapa_ID"].astype(str).str.strip() == ""]
+    if not gastos_sin.empty:
+        directos["_sin_etapa"] = gastos_sin["Monto_USD"].sum()
     # Propagar a padres
     totales = dict(directos)
     for _, et in df_etapas.iterrows():
@@ -1147,7 +1150,7 @@ else:
                         completadas = len(df_etapas[df_etapas["Estado"] == "Completado"])
                         pct_global = int(df_etapas["Progreso_Pct"].astype(float).mean()) if total_et > 0 else 0
                         presup_total = df_etapas[df_etapas["Parent_ID"].astype(str).str.strip() == ""]["Presupuesto_UYU"].sum()
-                        real_total = sum(reales.get(et["ID"], 0) for _, et in df_etapas[df_etapas["Parent_ID"].astype(str).str.strip() == ""].iterrows())
+                        real_total = sum(reales.get(et["ID"], 0) for _, et in df_etapas[df_etapas["Parent_ID"].astype(str).str.strip() == ""].iterrows()) + reales.get("_sin_etapa", 0)
 
                         ks1, ks2, ks3, ks4 = st.columns(4)
                         ks1.markdown(f'<div class="kpi-card kpi-card-primary"><span class="kpi-icon">📋</span><div class="kpi-label">Etapas</div><div class="kpi-value">{total_et}</div></div>', unsafe_allow_html=True)
@@ -1252,7 +1255,7 @@ else:
                 reales_c = real_por_etapa(df_gastos, df_etapas)
                 presup_top = df_etapas[df_etapas["Parent_ID"].astype(str).str.strip() == ""]
                 total_pres = presup_top["Presupuesto_UYU"].sum()
-                total_real = sum(reales_c.get(et["ID"], 0) for _, et in presup_top.iterrows())
+                total_real = sum(reales_c.get(et["ID"], 0) for _, et in presup_top.iterrows()) + reales_c.get("_sin_etapa", 0)
                 diferencia = total_pres - total_real
                 pct_ejec = (total_real / total_pres * 100) if total_pres > 0 else 0
 
