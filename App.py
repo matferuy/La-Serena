@@ -588,6 +588,60 @@ else:
         # --- PESTAÑA 4: ADMIN ---
         if es_admin:
             with tabs[3]:
+                st.markdown("#### 📥 Importar Gastos desde Google Sheet")
+                st.caption("Compartí la hoja origen con el `client_email` de tu cuenta de servicio antes de importar.")
+                with st.form("import_form"):
+                    src_id = st.text_input("ID del Google Sheet de origen", placeholder="1-GVRvZUUD9Tue1XYDW8jsiXlchyWQ47DYmHK1DjF_SM")
+                    src_hoja = st.text_input("Nombre de la hoja", value="Gastos")
+                    col_i1, col_i2 = st.columns(2)
+                    fecha_import = col_i1.date_input("Fecha a asignar", datetime.date.today())
+                    cat_import = col_i2.selectbox("Categoría por defecto", ["Trámites/Permisos", "Materiales", "Mano de Obra", "Terreno", "Otros"])
+                    if st.form_submit_button("Importar", type="primary", use_container_width=True):
+                        try:
+                            src_ws = get_gspread_client().open_by_key(src_id.strip()).worksheet(src_hoja.strip())
+                            all_values = src_ws.get_all_values()
+                            header_row = next((i for i, r in enumerate(all_values) if "Concepto" in r), None)
+                            if header_row is None:
+                                st.error("No se encontró encabezado 'Concepto' en la hoja.")
+                            else:
+                                headers = all_values[header_row]
+                                df_src = pd.DataFrame(all_values[header_row+1:], columns=headers)
+                                df_src = df_src[df_src["Concepto"].str.strip() != ""]
+                                df_src = df_src[~df_src["Concepto"].str.upper().str.contains("TOTAL")]
+                                tasa = obtener_tasa_usd_uyu()
+                                nuevos = []
+                                for _, row in df_src.iterrows():
+                                    moneda = str(row.get("Moneda", "UYU")).strip() or "UYU"
+                                    try:
+                                        monto = float(str(row.get("Monto", "0")).replace(",", ".").strip())
+                                    except:
+                                        continue
+                                    if monto <= 0:
+                                        continue
+                                    tasa_row = tasa if moneda == "USD" else 1.0
+                                    nuevos.append({
+                                        "ID": uuid.uuid4().hex,
+                                        "Fecha": fecha_import,
+                                        "Concepto": row["Concepto"].strip(),
+                                        "Moneda": moneda,
+                                        "Monto_Original": monto,
+                                        "Tasa_Cambio": tasa_row,
+                                        "Monto_UYU": monto * tasa_row,
+                                        "Pagado_por": str(row.get("Paga", "")).strip() or "admin",
+                                        "Categoria": cat_import,
+                                        "Archivo_Adjunto": "Sin adjunto",
+                                        "Modificado_por_Admin": True
+                                    })
+                                if nuevos:
+                                    save_data(pd.concat([df_gastos, pd.DataFrame(nuevos)], ignore_index=True), DATA_FILE)
+                                    st.success(f"✅ {len(nuevos)} gastos importados.")
+                                    st.rerun()
+                                else:
+                                    st.warning("No se encontraron filas con monto válido.")
+                        except Exception as e:
+                            st.error(f"Error: {e}")
+
+                st.markdown("---")
                 st.markdown("#### 💾 Respaldo de Datos")
                 if st.button("Generar Respaldo Excel", type="primary", use_container_width=True):
                     ruta, nombre, datos = generar_respaldo_excel(df_gastos, df_transfers)
