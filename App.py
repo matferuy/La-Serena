@@ -8,6 +8,8 @@ import uuid
 import io
 import gspread
 from google.oauth2.service_account import Credentials
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload
 
 # --- CONFIGURACIÓN INICIAL ---
 st.set_page_config(page_title="Casa La Serena", page_icon="🏡", layout="wide", initial_sidebar_state="collapsed")
@@ -128,6 +130,47 @@ def save_df_to_sheet(df, sheet_name):
     ws = _get_or_create_ws(sheet_name, df.columns.tolist())
     ws.clear()
     ws.update('A1', [df.columns.tolist()] + df.astype(str).values.tolist())
+
+# --- GOOGLE DRIVE ---
+DRIVE_FOLDER_NAME = "La Serena - Comprobantes"
+
+@st.cache_resource
+def get_drive_service():
+    creds = Credentials.from_service_account_info(
+        st.secrets["gcp_service_account"],
+        scopes=["https://www.googleapis.com/auth/drive"]
+    )
+    return build('drive', 'v3', credentials=creds)
+
+@st.cache_data(ttl=3600)
+def get_drive_folder_id():
+    service = get_drive_service()
+    q = f"name='{DRIVE_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
+    results = service.files().list(q=q, fields="files(id)").execute()
+    files = results.get('files', [])
+    if files:
+        return files[0]['id']
+    folder = service.files().create(
+        body={'name': DRIVE_FOLDER_NAME, 'mimeType': 'application/vnd.google-apps.folder'},
+        fields='id'
+    ).execute()
+    service.permissions().create(
+        fileId=folder['id'], body={'type': 'anyone', 'role': 'reader'}
+    ).execute()
+    return folder['id']
+
+def upload_comprobante(file_bytes, filename, mimetype):
+    service = get_drive_service()
+    folder_id = get_drive_folder_id()
+    media = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype=mimetype)
+    archivo = service.files().create(
+        body={'name': filename, 'parents': [folder_id]},
+        media_body=media, fields='id, webViewLink'
+    ).execute()
+    service.permissions().create(
+        fileId=archivo['id'], body={'type': 'anyone', 'role': 'reader'}
+    ).execute()
+    return archivo['webViewLink']
 
 # --- FUNCIÓN: OBTENER TIPO DE CAMBIO AUTOMÁTICO ---
 @st.cache_data(ttl=3600)
@@ -301,8 +344,15 @@ else:
                     monto_uyu = monto * tasa_cambio
                     nombre_archivo = "Sin adjunto"
                     if archivo_adjunto:
+                        file_bytes = bytes(archivo_adjunto.getbuffer())
                         nombre_archivo = f"GASTO_{fecha}_{archivo_adjunto.name}"
-                        with open(os.path.join(DIR_COMPROBANTES, nombre_archivo), "wb") as f: f.write(archivo_adjunto.getbuffer())
+                        if USE_GSHEETS:
+                            try:
+                                nombre_archivo = upload_comprobante(file_bytes, nombre_archivo, archivo_adjunto.type)
+                            except Exception as e:
+                                st.warning(f"No se pudo subir a Drive: {e}")
+                        else:
+                            with open(os.path.join(DIR_COMPROBANTES, nombre_archivo), "wb") as f: f.write(file_bytes)
                     
                     nuevo_dato = pd.DataFrame([{"ID": uuid.uuid4().hex, "Fecha": fecha, "Concepto": concepto, "Moneda": moneda, "Monto_Original": monto, "Tasa_Cambio": tasa_cambio, "Monto_UYU": monto_uyu, "Pagado_por": pagado_por, "Categoria": categoria, "Archivo_Adjunto": nombre_archivo, "Modificado_por_Admin": False}])
                     save_data(pd.concat([df_gastos, nuevo_dato], ignore_index=True), DATA_FILE)
@@ -492,7 +542,10 @@ else:
                     for _, f in df_gastos.sort_values("Fecha", ascending=False).iterrows():
                         with st.expander(f"{f['Fecha'].strftime('%d/%m/%Y')} | {f['Concepto']} | ${f['Monto_Original']:,.2f} {f['Moneda']}"):
                             st.write(f"**Por:** {f['Pagado_por']} | **Cat:** {f['Categoria']}")
-                            if st.button("✏️ Editar / Eliminar", key=f"e_{f['ID']}"): 
+                            adjunto = str(f.get('Archivo_Adjunto', ''))
+                            if adjunto.startswith('https://'):
+                                st.markdown(f"[📎 Ver comprobante]({adjunto})")
+                            if st.button("✏️ Editar / Eliminar", key=f"e_{f['ID']}"):
                                 st.session_state.gasto_a_editar = f["ID"]
                                 st.rerun()
                 else:
