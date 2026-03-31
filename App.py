@@ -459,6 +459,7 @@ if "transfer_a_editar" not in st.session_state: st.session_state.transfer_a_edit
 if "modo_registro" not in st.session_state: st.session_state.modo_registro = None
 if "obra_modo" not in st.session_state: st.session_state.obra_modo = None
 if "etapa_a_editar" not in st.session_state: st.session_state.etapa_a_editar = None
+if "avance_a_editar" not in st.session_state: st.session_state.avance_a_editar = None
 
 usuarios_df = load_users()
 
@@ -1071,30 +1072,43 @@ else:
             # ── SUBTAB 2: AVANCES ────────────────────────────────────
             with obra_tabs[1]:
                 TAG_OPTIONS = ["Estructura", "Materiales", "Inspección", "Problema", "Hito", "Reunión", "Foto general", "Terminaciones"]
-
-                col_avance_btn, col_filtro = st.columns([2, 2])
-                with col_avance_btn:
-                    if st.button("＋  Registrar Avance", type="primary", use_container_width=True):
-                        st.session_state.obra_modo = "nuevo_avance"
-                        st.rerun()
-
                 nombres_etapas = df_etapas["Nombre"].tolist() if not df_etapas.empty else []
-                filtro_etapa = col_filtro.selectbox("Filtrar por etapa", ["Todas"] + nombres_etapas, key="filtro_et_av")
 
-                if st.session_state.obra_modo == "nuevo_avance":
-                    st.markdown("<hr class='divider'>", unsafe_allow_html=True)
-                    st.markdown('<div class="section-title">Nuevo Registro de Avance</div>', unsafe_allow_html=True)
+                # ── Formulario nuevo avance o edición ──
+                modo_av = st.session_state.obra_modo
+                av_edit_id = st.session_state.avance_a_editar
+                if modo_av in ("nuevo_avance", "editar_avance"):
+                    editando_av = (modo_av == "editar_avance" and av_edit_id is not None)
+                    if editando_av:
+                        fila_av = df_avances[df_avances["ID"] == av_edit_id].iloc[0]
+                        st.markdown(f'<div class="section-title">Editar: {fila_av["Titulo"]}</div>', unsafe_allow_html=True)
+                    else:
+                        st.markdown('<div class="section-title">Nuevo Registro de Avance</div>', unsafe_allow_html=True)
+
                     with st.form("form_avance"):
-                        av_titulo = st.text_input("Título del avance", placeholder="Ej: Colada de losa planta baja")
+                        av_titulo = st.text_input("Título del avance",
+                            value=fila_av["Titulo"] if editando_av else "",
+                            placeholder="Ej: Colada de losa planta baja")
                         col_av1, col_av2 = st.columns(2)
-                        av_fecha = col_av1.date_input("Fecha", datetime.date.today())
-                        av_etapa = col_av2.selectbox("Etapa relacionada", ["(Sin etapa)"] + nombres_etapas)
-                        av_detalle = st.text_area("Detalle / Observaciones", placeholder="Describí lo que se hizo, problemas encontrados, materiales usados…", height=110)
-                        av_tags = st.multiselect("Tags", TAG_OPTIONS)
-                        av_foto = st.file_uploader("Adjuntar foto o documento", type=["jpg", "jpeg", "png", "pdf", "heic"])
-                        col_sb, col_sc = st.columns(2)
-                        if col_sb.form_submit_button("Guardar Avance", type="primary", use_container_width=True):
-                            foto_url = "Sin foto"
+                        av_fecha = col_av1.date_input("Fecha",
+                            value=pd.to_datetime(fila_av["Fecha"]).date() if editando_av else datetime.date.today())
+                        et_options = ["(Sin etapa)"] + nombres_etapas
+                        et_default = fila_av["Etapa"] if editando_av and fila_av["Etapa"] in nombres_etapas else "(Sin etapa)"
+                        av_etapa = col_av2.selectbox("Etapa relacionada", et_options,
+                            index=et_options.index(et_default))
+                        av_detalle = st.text_area("Detalle / Observaciones",
+                            value=fila_av["Detalle"] if editando_av else "",
+                            placeholder="Describí lo que se hizo, problemas encontrados, materiales usados…", height=110)
+                        tags_default = [t.strip() for t in str(fila_av.get("Tags","")).split(",") if t.strip()] if editando_av else []
+                        av_tags = st.multiselect("Tags", TAG_OPTIONS, default=tags_default)
+                        foto_actual = str(fila_av.get("Foto_URL","")) if editando_av else ""
+                        if foto_actual.startswith("http"):
+                            st.markdown(f"📎 Foto actual: [ver archivo]({foto_actual})")
+                        av_foto = st.file_uploader("Adjuntar / reemplazar foto o documento", type=["jpg", "jpeg", "png", "pdf", "heic"])
+
+                        btn_cols = st.columns([2, 1, 1]) if editando_av else st.columns([3, 1])
+                        if btn_cols[0].form_submit_button("Guardar Avance", type="primary", use_container_width=True):
+                            foto_url = foto_actual if editando_av else "Sin foto"
                             if av_foto:
                                 file_bytes = bytes(av_foto.getbuffer())
                                 nombre_foto = f"AVANCE_{av_fecha}_{av_foto.name}"
@@ -1106,64 +1120,109 @@ else:
                                 else:
                                     with open(os.path.join(DIR_COMPROBANTES, nombre_foto), "wb") as f: f.write(file_bytes)
                                     foto_url = nombre_foto
-                            nuevo_av = {
-                                "ID": uuid.uuid4().hex, "Fecha": av_fecha,
+                            datos_av = {
+                                "ID": fila_av["ID"] if editando_av else uuid.uuid4().hex,
+                                "Fecha": av_fecha,
                                 "Etapa": av_etapa if av_etapa != "(Sin etapa)" else "",
                                 "Titulo": av_titulo, "Detalle": av_detalle,
                                 "Foto_URL": foto_url,
                                 "Tags": ", ".join(av_tags),
-                                "Registrado_por": st.session_state.usuario_actual,
+                                "Registrado_por": fila_av["Registrado_por"] if editando_av else st.session_state.usuario_actual,
                             }
-                            save_data(pd.concat([df_avances, pd.DataFrame([nuevo_av])], ignore_index=True), AVANCES_FILE)
+                            if editando_av:
+                                idx_av = df_avances[df_avances["ID"] == av_edit_id].index[0]
+                                for k, v in datos_av.items(): df_avances.at[idx_av, k] = v
+                            else:
+                                df_avances = pd.concat([df_avances, pd.DataFrame([datos_av])], ignore_index=True)
+                            save_data(df_avances, AVANCES_FILE)
                             st.session_state.obra_modo = None
+                            st.session_state.avance_a_editar = None
                             st.rerun()
-                        if col_sc.form_submit_button("Cancelar", use_container_width=True):
+                        if editando_av and btn_cols[1].form_submit_button("🗑️ Eliminar", use_container_width=True):
+                            save_data(df_avances[df_avances["ID"] != av_edit_id], AVANCES_FILE)
                             st.session_state.obra_modo = None
+                            st.session_state.avance_a_editar = None
+                            st.rerun()
+                        if btn_cols[-1].form_submit_button("Cancelar", use_container_width=True):
+                            st.session_state.obra_modo = None
+                            st.session_state.avance_a_editar = None
                             st.rerun()
                     st.markdown("<hr class='divider'>", unsafe_allow_html=True)
 
-                if df_avances.empty:
-                    st.markdown("""
-                        <div style='text-align:center; padding:50px 20px;'>
-                            <div style='font-size:3rem; margin-bottom:14px;'>📸</div>
-                            <div style='font-size:1rem; font-weight:700; opacity:0.5;'>Sin registros de avance</div>
-                            <div style='font-size:0.82rem; opacity:0.3; margin-top:6px;'>Registrá el primer avance para llevar el historial de la obra</div>
-                        </div>
-                    """, unsafe_allow_html=True)
                 else:
-                    df_av_show = df_avances.copy()
-                    df_av_show["Fecha"] = pd.to_datetime(df_av_show["Fecha"])
-                    if filtro_etapa != "Todas":
-                        df_av_show = df_av_show[df_av_show["Etapa"] == filtro_etapa]
-                    df_av_show = df_av_show.sort_values("Fecha", ascending=False)
+                    col_avance_btn, col_filtro = st.columns([2, 2])
+                    with col_avance_btn:
+                        if st.button("＋  Registrar Avance", type="primary", use_container_width=True):
+                            st.session_state.obra_modo = "nuevo_avance"
+                            st.rerun()
+                    filtro_etapa = col_filtro.selectbox("Filtrar por etapa", ["Todas"] + nombres_etapas, key="filtro_et_av")
 
-                    for _, av in df_av_show.iterrows():
-                        foto = str(av.get("Foto_URL", ""))
-                        tags_raw = str(av.get("Tags", ""))
-                        tags_list = [t.strip() for t in tags_raw.split(",") if t.strip()]
-                        tags_html = " ".join(f'<span class="badge badge-otros">{t}</span>' for t in tags_list)
-                        etapa_html = f'<span style="font-size:0.78rem; opacity:0.5;">📋 {av["Etapa"]}</span>' if av.get("Etapa") else ""
-                        foto_html = f'<br><a href="{foto}" target="_blank" style="font-size:0.82rem; color:#4F46E5; font-weight:600;">📸 Ver foto / documento</a>' if foto.startswith("http") else ""
-                        reg_html = f'<span style="font-size:0.72rem; opacity:0.35;">por {av.get("Registrado_por","")}</span>' if av.get("Registrado_por") else ""
-
-                        st.markdown(f"""
-                            <div class="avance-card">
-                                <div style='display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:4px; margin-bottom:2px;'>
-                                    <div>
-                                        <div class="avance-fecha">{av['Fecha'].strftime('%d %b %Y').upper()} {etapa_html}</div>
-                                        <div class="avance-titulo">{av.get('Titulo','Sin título')}</div>
-                                    </div>
-                                    {reg_html}
-                                </div>
-                                <div class="avance-detalle">{av.get('Detalle','')}</div>
-                                {foto_html}
-                                <div style='margin-top:10px; display:flex; gap:6px; flex-wrap:wrap;'>{tags_html}</div>
+                    if df_avances.empty:
+                        st.markdown("""
+                            <div style='text-align:center; padding:50px 20px;'>
+                                <div style='font-size:3rem; margin-bottom:14px;'>📸</div>
+                                <div style='font-size:1rem; font-weight:700; opacity:0.5;'>Sin registros de avance</div>
+                                <div style='font-size:0.82rem; opacity:0.3; margin-top:6px;'>Registrá el primer avance para llevar el historial de la obra</div>
                             </div>
                         """, unsafe_allow_html=True)
-                        if es_admin:
-                            if st.button("🗑️ Eliminar", key=f"del_av_{av['ID']}", use_container_width=True):
-                                save_data(df_avances[df_avances["ID"] != av["ID"]], AVANCES_FILE)
-                                st.rerun()
+                    else:
+                        df_av_show = df_avances.copy()
+                        df_av_show["Fecha"] = pd.to_datetime(df_av_show["Fecha"])
+                        if filtro_etapa != "Todas":
+                            df_av_show = df_av_show[df_av_show["Etapa"] == filtro_etapa]
+                        df_av_show = df_av_show.sort_values("Fecha", ascending=False)
+
+                        # Agrupar por etapa
+                        df_av_show["_etapa_grp"] = df_av_show["Etapa"].fillna("").replace("", "Sin etapa")
+                        # Orden de grupos: etapas definidas primero (en orden de la hoja), luego "Sin etapa"
+                        orden_etapas = nombres_etapas + ["Sin etapa"]
+                        grupos_presentes = [e for e in orden_etapas if e in df_av_show["_etapa_grp"].values]
+
+                        for grp_nombre in grupos_presentes:
+                            grp_df = df_av_show[df_av_show["_etapa_grp"] == grp_nombre]
+                            # Buscar estado de la etapa para el badge
+                            et_row = df_etapas[df_etapas["Nombre"] == grp_nombre] if not df_etapas.empty else pd.DataFrame()
+                            if not et_row.empty:
+                                est = str(et_row.iloc[0].get("Estado", "Pendiente"))
+                                badge_cls, badge_icon = ESTADO_COLORS.get(est, ("estado-pendiente", "⏳"))
+                                pct = int(float(et_row.iloc[0].get("Progreso_Pct", 0)))
+                                grp_badge = f'<span class="badge {badge_cls}">{badge_icon} {est} · {pct}%</span>'
+                            else:
+                                grp_badge = ""
+
+                            st.markdown(
+                                f"<div style='display:flex; align-items:center; gap:10px; margin:22px 0 10px 0;'>"
+                                f"<div style='font-size:1rem; font-weight:800; letter-spacing:-0.02em;'>📋 {grp_nombre}</div>"
+                                f"{grp_badge}</div>",
+                                unsafe_allow_html=True
+                            )
+
+                            for _, av in grp_df.iterrows():
+                                foto = str(av.get("Foto_URL", ""))
+                                tags_raw = str(av.get("Tags", ""))
+                                tags_list = [t.strip() for t in tags_raw.split(",") if t.strip()]
+                                tags_html = " ".join(f'<span class="badge badge-otros">{t}</span>' for t in tags_list)
+                                foto_html = f'<br><a href="{foto}" target="_blank" style="font-size:0.82rem; color:#4F46E5; font-weight:600;">📸 Ver foto / documento</a>' if foto.startswith("http") else ""
+                                reg_html = f'<span style="font-size:0.72rem; opacity:0.35;">por {av.get("Registrado_por","")}</span>' if av.get("Registrado_por") else ""
+
+                                st.markdown(f"""
+                                    <div class="avance-card">
+                                        <div style='display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:4px; margin-bottom:2px;'>
+                                            <div>
+                                                <div class="avance-fecha">{av['Fecha'].strftime('%d %b %Y').upper()}</div>
+                                                <div class="avance-titulo">{av.get('Titulo','Sin título')}</div>
+                                            </div>
+                                            {reg_html}
+                                        </div>
+                                        <div class="avance-detalle">{av.get('Detalle','')}</div>
+                                        {foto_html}
+                                        <div style='margin-top:10px; display:flex; gap:6px; flex-wrap:wrap;'>{tags_html}</div>
+                                    </div>
+                                """, unsafe_allow_html=True)
+                                if st.button("✏️ Editar", key=f"edit_av_{av['ID']}", use_container_width=True):
+                                    st.session_state.avance_a_editar = av["ID"]
+                                    st.session_state.obra_modo = "editar_avance"
+                                    st.rerun()
 
             # ── SUBTAB 3: PLANOS ─────────────────────────────────────
             with obra_tabs[2]:
