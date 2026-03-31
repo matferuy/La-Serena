@@ -176,12 +176,22 @@ def extraer_hyperlinks(spreadsheet_id, sheet_name):
 
 @st.cache_resource
 def get_drive_service():
-    creds = Credentials.from_service_account_info(
-        st.secrets["gcp_service_account"],
-        scopes=["https://www.googleapis.com/auth/drive"]
-    )
-    if "drive_impersonate_email" in st.secrets:
-        creds = creds.with_subject(st.secrets["drive_impersonate_email"])
+    if "google_oauth_refresh_token" in st.secrets:
+        from google.oauth2.credentials import Credentials as OAuthCredentials
+        creds = OAuthCredentials(
+            token=None,
+            refresh_token=st.secrets["google_oauth_refresh_token"],
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=st.secrets["google_oauth_client_id"],
+            client_secret=st.secrets["google_oauth_client_secret"]
+        )
+    else:
+        creds = Credentials.from_service_account_info(
+            st.secrets["gcp_service_account"],
+            scopes=["https://www.googleapis.com/auth/drive"]
+        )
+        if "drive_impersonate_email" in st.secrets:
+            creds = creds.with_subject(st.secrets["drive_impersonate_email"])
     return build('drive', 'v3', credentials=creds)
 
 def get_drive_folder_id():
