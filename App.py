@@ -180,6 +180,8 @@ def get_drive_service():
         st.secrets["gcp_service_account"],
         scopes=["https://www.googleapis.com/auth/drive"]
     )
+    if "drive_impersonate_email" in st.secrets:
+        creds = creds.with_subject(st.secrets["drive_impersonate_email"])
     return build('drive', 'v3', credentials=creds)
 
 def get_drive_folder_id():
