@@ -531,6 +531,7 @@ if "modo_registro" not in st.session_state: st.session_state.modo_registro = Non
 if "obra_modo" not in st.session_state: st.session_state.obra_modo = None
 if "etapa_a_editar" not in st.session_state: st.session_state.etapa_a_editar = None
 if "avance_a_editar" not in st.session_state: st.session_state.avance_a_editar = None
+if "nueva_subetapa_parent" not in st.session_state: st.session_state.nueva_subetapa_parent = None
 
 usuarios_df = load_users()
 
@@ -1023,60 +1024,102 @@ else:
 
             # ── SUBTAB 1: ETAPAS ──────────────────────────────────────
             with obra_tabs[0]:
-                # Formulario nueva etapa / edición
-                if st.session_state.obra_modo == "nueva_etapa" or st.session_state.etapa_a_editar is not None:
+                # ── helpers locales ──
+                et_parent_options_labels = ["(Ninguna — etapa principal)"] + df_etapas[df_etapas["Parent_ID"].astype(str).str.strip() == ""]["Nombre"].tolist()
+                et_parent_options_ids    = [""] + df_etapas[df_etapas["Parent_ID"].astype(str).str.strip() == ""]["ID"].tolist()
+
+                def _reset_etapa_form():
+                    st.session_state.obra_modo = None
+                    st.session_state.etapa_a_editar = None
+                    st.session_state.nueva_subetapa_parent = None
+
+                # Formulario nueva etapa / sub-etapa / edición
+                if st.session_state.obra_modo in ("nueva_etapa", "nueva_subetapa") or st.session_state.etapa_a_editar is not None:
                     editando = st.session_state.etapa_a_editar is not None
+                    es_subetapa_nueva = st.session_state.obra_modo == "nueva_subetapa"
+
                     if editando:
                         fila_et = df_etapas[df_etapas["ID"] == st.session_state.etapa_a_editar].iloc[0]
-                        st.markdown(f'<div class="section-title">Editar Etapa: {fila_et["Nombre"]}</div>', unsafe_allow_html=True)
+                        parent_actual = str(fila_et.get("Parent_ID", "")).strip()
+                        es_hijo = parent_actual != ""
+                        titulo_form = f'Editar Sub-etapa: {fila_et["Nombre"]}' if es_hijo else f'Editar Etapa: {fila_et["Nombre"]}'
                     else:
-                        st.markdown('<div class="section-title">Nueva Etapa</div>', unsafe_allow_html=True)
+                        fila_et = None
+                        parent_actual = st.session_state.nueva_subetapa_parent or ""
+                        es_hijo = parent_actual != ""
+                        titulo_form = "Nueva Sub-etapa" if es_hijo else "Nueva Etapa"
+
+                    st.markdown(f'<div class="section-title">{titulo_form}</div>', unsafe_allow_html=True)
+
+                    # Mostrar a qué padre pertenece
+                    if es_hijo and parent_actual in et_parent_options_ids:
+                        padre_nombre = et_parent_options_labels[et_parent_options_ids.index(parent_actual)]
+                        st.caption(f"Sub-etapa de: **{padre_nombre}**")
 
                     with st.form("form_etapa"):
-                        et_nombre = st.text_input("Nombre de la etapa", value=fila_et["Nombre"] if editando else "", placeholder="Ej: Cimientos, Estructura, Terminaciones…")
-                        et_desc = st.text_area("Descripción", value=fila_et["Descripcion"] if editando else "", placeholder="Describí brevemente el alcance de esta etapa", height=90)
-                        col_e1, col_e2, col_e3 = st.columns(3)
+                        et_nombre = st.text_input("Nombre", value=fila_et["Nombre"] if editando else "", placeholder="Ej: Planta Baja, Sanitaria interior…")
+                        et_desc   = st.text_area("Descripción", value=fila_et["Descripcion"] if editando else "", placeholder="Alcance de esta etapa", height=80)
+
+                        col_e1, col_e2 = st.columns(2)
                         estados = ["Pendiente", "En Curso", "Completado"]
                         idx_est = estados.index(fila_et["Estado"]) if editando and fila_et["Estado"] in estados else 0
                         et_estado = col_e1.selectbox("Estado", estados, index=idx_est)
-                        et_inicio = col_e2.date_input("Inicio", value=pd.to_datetime(fila_et["Fecha_Inicio"]).date() if editando and str(fila_et["Fecha_Inicio"]) not in ["", "nan"] else datetime.date.today())
-                        et_fin = col_e3.date_input("Fin estimado", value=pd.to_datetime(fila_et["Fecha_Fin_Est"]).date() if editando and str(fila_et["Fecha_Fin_Est"]) not in ["", "nan"] else datetime.date.today())
-                        et_pct = st.slider("Progreso (%)", 0, 100, int(float(fila_et["Progreso_Pct"])) if editando and str(fila_et["Progreso_Pct"]) not in ["", "nan"] else 0)
-                        et_plano = st.text_input("Link a plano (Drive / Google Docs, opcional)", value=fila_et["Plano_URL"] if editando else "", placeholder="https://drive.google.com/…")
+                        et_presup = col_e2.number_input("Presupuesto (USD)", min_value=0.0,
+                            value=float(fila_et["Presupuesto_UYU"]) if editando else 0.0, format="%.0f")
+
+                        col_e3, col_e4 = st.columns(2)
+                        et_inicio = col_e3.date_input("Inicio", value=pd.to_datetime(fila_et["Fecha_Inicio"]).date() if editando and str(fila_et.get("Fecha_Inicio","")) not in ["","nan"] else datetime.date.today())
+                        et_fin    = col_e4.date_input("Fin estimado", value=pd.to_datetime(fila_et["Fecha_Fin_Est"]).date() if editando and str(fila_et.get("Fecha_Fin_Est","")) not in ["","nan"] else datetime.date.today())
+
+                        et_pct   = st.slider("Progreso (%)", 0, 100, int(float(fila_et["Progreso_Pct"])) if editando and str(fila_et.get("Progreso_Pct","")) not in ["","nan"] else 0)
+                        et_plano = st.text_input("Link a plano (opcional)", value=fila_et["Plano_URL"] if editando else "", placeholder="https://drive.google.com/…")
+
+                        # Selector de etapa padre (solo si se edita o crea desde la raíz)
+                        if editando:
+                            cur_pid_idx = et_parent_options_ids.index(parent_actual) if parent_actual in et_parent_options_ids else 0
+                            et_parent_sel = st.selectbox("Etapa padre", et_parent_options_labels, index=cur_pid_idx)
+                            et_parent_id  = et_parent_options_ids[et_parent_options_labels.index(et_parent_sel)]
+                        else:
+                            et_parent_id = parent_actual  # ya viene fijado por el botón que se usó
 
                         cols_btn = st.columns([2, 1, 1]) if editando else st.columns([3, 1])
-                        if cols_btn[0].form_submit_button("Guardar Etapa", type="primary", use_container_width=True):
+                        if cols_btn[0].form_submit_button("Guardar", type="primary", use_container_width=True):
                             if et_nombre:
-                                nueva = {
+                                registro = {
                                     "ID": fila_et["ID"] if editando else uuid.uuid4().hex,
                                     "Nombre": et_nombre, "Descripcion": et_desc,
                                     "Estado": et_estado, "Fecha_Inicio": et_inicio,
                                     "Fecha_Fin_Est": et_fin, "Progreso_Pct": et_pct,
-                                    "Plano_URL": et_plano,
+                                    "Plano_URL": et_plano, "Presupuesto_UYU": et_presup,
+                                    "Parent_ID": et_parent_id,
                                 }
                                 if editando:
                                     idx_e = df_etapas[df_etapas["ID"] == st.session_state.etapa_a_editar].index[0]
-                                    for k, v in nueva.items(): df_etapas.at[idx_e, k] = v
+                                    for k, v in registro.items(): df_etapas.at[idx_e, k] = v
                                 else:
-                                    df_etapas = pd.concat([df_etapas, pd.DataFrame([nueva])], ignore_index=True)
+                                    df_etapas = pd.concat([df_etapas, pd.DataFrame([registro])], ignore_index=True)
                                 save_data(df_etapas, ETAPAS_FILE)
-                                st.session_state.obra_modo = None
-                                st.session_state.etapa_a_editar = None
+                                _reset_etapa_form()
                                 st.rerun()
                             else:
                                 st.error("El nombre es obligatorio.")
+
                         if editando and cols_btn[1].form_submit_button("🗑️ Eliminar", use_container_width=True):
-                            df_etapas = df_etapas[df_etapas["ID"] != st.session_state.etapa_a_editar]
+                            # Eliminar también sus hijos
+                            hijos_ids = df_etapas[df_etapas["Parent_ID"].astype(str) == str(fila_et["ID"])]["ID"].tolist()
+                            ids_a_borrar = [fila_et["ID"]] + hijos_ids
+                            df_etapas = df_etapas[~df_etapas["ID"].isin(ids_a_borrar)]
                             save_data(df_etapas, ETAPAS_FILE)
-                            st.session_state.etapa_a_editar = None
+                            _reset_etapa_form()
                             st.rerun()
+
                         if cols_btn[-1].form_submit_button("Cancelar", use_container_width=True):
-                            st.session_state.obra_modo = None
-                            st.session_state.etapa_a_editar = None
+                            _reset_etapa_form()
                             st.rerun()
                 else:
                     if st.button("＋  Nueva Etapa", type="primary", use_container_width=True):
                         st.session_state.obra_modo = "nueva_etapa"
+                        st.session_state.nueva_subetapa_parent = None
                         st.rerun()
                     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -1145,8 +1188,15 @@ else:
                                 f'</div>'
                             )
                             st.markdown(et_html, unsafe_allow_html=True)
-                            if st.button("✏️ Editar", key=f"edit_et_{et['ID']}", use_container_width=True):
+                            btn_et1, btn_et2 = st.columns(2)
+                            if btn_et1.button("✏️ Editar etapa", key=f"edit_et_{et['ID']}", use_container_width=True):
                                 st.session_state.etapa_a_editar = et["ID"]
+                                st.session_state.obra_modo = None
+                                st.rerun()
+                            if btn_et2.button("＋ Sub-etapa", key=f"sub_et_{et['ID']}", use_container_width=True):
+                                st.session_state.obra_modo = "nueva_subetapa"
+                                st.session_state.nueva_subetapa_parent = et["ID"]
+                                st.session_state.etapa_a_editar = None
                                 st.rerun()
 
                             # Sub-etapas indentadas
@@ -1182,8 +1232,9 @@ else:
                                     f'</div>'
                                 )
                                 st.markdown(ch_html, unsafe_allow_html=True)
-                                if st.button("✏️ Editar", key=f"edit_et_{ch['ID']}", use_container_width=True):
+                                if st.button("✏️ Editar sub-etapa", key=f"edit_et_{ch['ID']}", use_container_width=True):
                                     st.session_state.etapa_a_editar = ch["ID"]
+                                    st.session_state.obra_modo = None
                                     st.rerun()
 
             # ── SUBTAB 2: COSTEO ─────────────────────────────────────
