@@ -228,12 +228,29 @@ SHEET_NAMES = {
     DATA_FILE: "Gastos", TRANSFERS_FILE: "Transferencias", USERS_FILE: "Usuarios",
     ETAPAS_FILE: "Etapas", AVANCES_FILE: "Avances", PLANOS_FILE: "Planos"
 }
-GASTOS_COLS = ["ID", "Fecha", "Concepto", "Moneda", "Monto_Original", "Tasa_Cambio", "Monto_UYU", "Pagado_por", "Categoria", "Archivo_Adjunto", "Modificado_por_Admin"]
+GASTOS_COLS = ["ID", "Fecha", "Concepto", "Moneda", "Monto_Original", "Tasa_Cambio", "Monto_UYU", "Pagado_por", "Categoria", "Etapa_ID", "Archivo_Adjunto", "Modificado_por_Admin"]
 TRANSFERS_COLS = ["ID", "Fecha", "Origen", "Destino", "Moneda", "Monto_Original", "Tasa_Cambio", "Monto_UYU", "Archivo_Adjunto", "Modificado_por_Admin"]
 USERS_COLS = ["Usuario", "Clave"]
-ETAPAS_COLS = ["ID", "Nombre", "Descripcion", "Estado", "Fecha_Inicio", "Fecha_Fin_Est", "Progreso_Pct", "Plano_URL"]
+ETAPAS_COLS = ["ID", "Nombre", "Descripcion", "Estado", "Fecha_Inicio", "Fecha_Fin_Est", "Progreso_Pct", "Plano_URL", "Presupuesto_UYU", "Parent_ID"]
 AVANCES_COLS = ["ID", "Fecha", "Etapa", "Titulo", "Detalle", "Foto_URL", "Tags", "Registrado_por"]
 PLANOS_COLS = ["ID", "Nombre", "Descripcion", "Version", "Fecha", "URL", "Tipo"]
+
+# Etapas predefinidas basadas en el presupuesto (pino, $63.300 total)
+ETAPAS_SEED = [
+    {"ID":"et_proyecto",   "Nombre":"Proyecto",               "Descripcion":"Diseño, planos y documentación del proyecto", "Estado":"En Curso",  "Presupuesto_UYU":0,     "Parent_ID":""},
+    {"ID":"et_vivienda",   "Nombre":"Vivienda",                "Descripcion":"Estructura de la vivienda – 61m² (pino)",      "Estado":"Pendiente", "Presupuesto_UYU":42700, "Parent_ID":""},
+    {"ID":"et_pb",         "Nombre":"Planta Baja",             "Descripcion":"46 m² × $700/m²",                             "Estado":"Pendiente", "Presupuesto_UYU":32200, "Parent_ID":"et_vivienda"},
+    {"ID":"et_pa",         "Nombre":"Planta Alta",             "Descripcion":"15 m² × $700/m²",                             "Estado":"Pendiente", "Presupuesto_UYU":10500, "Parent_ID":"et_vivienda"},
+    {"ID":"et_sanitaria",  "Nombre":"Instalación Sanitaria",   "Descripcion":"Instalación sanitaria exterior según planos",  "Estado":"Pendiente", "Presupuesto_UYU":2500,  "Parent_ID":""},
+    {"ID":"et_electrica",  "Nombre":"Instalación Eléctrica",   "Descripcion":"Enhebrado, acometida, plaquetas, tablero",     "Estado":"Pendiente", "Presupuesto_UYU":700,   "Parent_ID":""},
+    {"ID":"et_deck",       "Nombre":"Deck + Escalones",        "Descripcion":"26 m² × $200/m²",                             "Estado":"Pendiente", "Presupuesto_UYU":5200,  "Parent_ID":""},
+    {"ID":"et_parrillero", "Nombre":"Parrillero",              "Descripcion":"Parrillero ladrillo a la vista",               "Estado":"Pendiente", "Presupuesto_UYU":800,   "Parent_ID":""},
+    {"ID":"et_leyes",      "Nombre":"Leyes Sociales",          "Descripcion":"Leyes sociales de la construcción",            "Estado":"Pendiente", "Presupuesto_UYU":7500,  "Parent_ID":""},
+    {"ID":"et_admin",      "Nombre":"Administración",          "Descripcion":"Gastos administrativos y seguimiento",         "Estado":"Pendiente", "Presupuesto_UYU":3900,  "Parent_ID":""},
+    {"ID":"et_idr",        "Nombre":"Gastos Admin IDR",        "Descripcion":"Gastos administrativos IDR",                  "Estado":"Pendiente", "Presupuesto_UYU":800,   "Parent_ID":"et_admin"},
+    {"ID":"et_gestoria",   "Nombre":"Gestoría",                "Descripcion":"Gastos de gestoría",                          "Estado":"Pendiente", "Presupuesto_UYU":600,   "Parent_ID":"et_admin"},
+    {"ID":"et_seguimiento","Nombre":"Seguimiento de Obra",     "Descripcion":"Seguimiento profesional de la obra",          "Estado":"Pendiente", "Presupuesto_UYU":2500,  "Parent_ID":"et_admin"},
+]
 
 @st.cache_resource
 def get_gspread_client():
@@ -383,11 +400,13 @@ def load_data():
             if "ID" not in df.columns: df["ID"] = [uuid.uuid4().hex for _ in range(len(df))]
             if "Modificado_por_Admin" not in df.columns: df["Modificado_por_Admin"] = False
             else: df["Modificado_por_Admin"] = df["Modificado_por_Admin"].isin([True, "True", "true", 1, "1"])
+            if "Etapa_ID" not in df.columns: df["Etapa_ID"] = ""
         return df
     if os.path.exists(DATA_FILE):
         df = pd.read_csv(DATA_FILE)
         if "ID" not in df.columns: df["ID"] = [uuid.uuid4().hex for _ in range(len(df))]
         if "Modificado_por_Admin" not in df.columns: df["Modificado_por_Admin"] = False
+        if "Etapa_ID" not in df.columns: df["Etapa_ID"] = ""
         df.to_csv(DATA_FILE, index=False)
         return df
     return pd.DataFrame(columns=GASTOS_COLS)
@@ -408,12 +427,31 @@ def load_transfers():
         return df
     return pd.DataFrame(columns=TRANSFERS_COLS)
 
+def _seed_etapas(df):
+    """Agrega etapas del presupuesto que no existen todavía (por ID)."""
+    existing_ids = set(df["ID"].tolist()) if not df.empty else set()
+    nuevas = [e for e in ETAPAS_SEED if e["ID"] not in existing_ids]
+    if not nuevas:
+        return df
+    defaults = {"Fecha_Inicio": "", "Fecha_Fin_Est": "", "Progreso_Pct": 0, "Plano_URL": ""}
+    rows = [{**defaults, **e} for e in nuevas]
+    df_out = pd.concat([df, pd.DataFrame(rows)], ignore_index=True)
+    save_df_to_sheet(df_out, "Etapas") if USE_GSHEETS else df_out.to_csv(ETAPAS_FILE, index=False)
+    return df_out
+
 def load_etapas():
     if USE_GSHEETS:
-        return load_sheet_as_df("Etapas", ETAPAS_COLS)
-    if os.path.exists(ETAPAS_FILE):
-        return pd.read_csv(ETAPAS_FILE)
-    return pd.DataFrame(columns=ETAPAS_COLS)
+        df = load_sheet_as_df("Etapas", ETAPAS_COLS)
+    elif os.path.exists(ETAPAS_FILE):
+        df = pd.read_csv(ETAPAS_FILE)
+    else:
+        df = pd.DataFrame(columns=ETAPAS_COLS)
+    for col in ["Presupuesto_UYU", "Parent_ID"]:
+        if col not in df.columns:
+            df[col] = "" if col == "Parent_ID" else 0
+    df["Presupuesto_UYU"] = pd.to_numeric(df["Presupuesto_UYU"], errors="coerce").fillna(0)
+    df["Parent_ID"] = df["Parent_ID"].fillna("")
+    return _seed_etapas(df)
 
 def load_avances():
     if USE_GSHEETS:
@@ -450,6 +488,35 @@ def generar_respaldo_excel(df_g, df_t):
     except Exception:
         ruta = nombre
     return ruta, nombre, datos
+
+def build_etapa_options(df_etapas):
+    """Devuelve (labels, ids) para usar en st.selectbox, con jerarquía indentada."""
+    labels, ids = ["(Sin etapa)"], [""]
+    if df_etapas.empty:
+        return labels, ids
+    top = df_etapas[df_etapas["Parent_ID"].astype(str).str.strip() == ""]
+    for _, et in top.iterrows():
+        labels.append(et["Nombre"])
+        ids.append(et["ID"])
+        children = df_etapas[df_etapas["Parent_ID"].astype(str) == str(et["ID"])]
+        for _, ch in children.iterrows():
+            labels.append(f"  └ {ch['Nombre']}")
+            ids.append(ch["ID"])
+    return labels, ids
+
+def real_por_etapa(df_gastos, df_etapas):
+    """Devuelve dict {etapa_id: monto_real_UYU} incluyendo suma de sub-etapas en padres."""
+    if df_gastos.empty:
+        return {}
+    gastos_et = df_gastos[df_gastos["Etapa_ID"].astype(str).str.strip() != ""]
+    directos = gastos_et.groupby("Etapa_ID")["Monto_UYU"].sum().to_dict()
+    # Propagar a padres
+    totales = dict(directos)
+    for _, et in df_etapas.iterrows():
+        pid = str(et.get("Parent_ID", "")).strip()
+        if pid and et["ID"] in totales:
+            totales[pid] = totales.get(pid, 0) + totales[et["ID"]]
+    return totales
 
 # --- INICIALIZACIÓN DE SESIÓN ---
 if "logueado" not in st.session_state: st.session_state.logueado = False
@@ -553,8 +620,11 @@ else:
             lista_usuarios = usuarios_df["Usuario"].tolist()
             pagado_por = st.selectbox("¿Quién puso el dinero?", lista_usuarios, index=lista_usuarios.index(st.session_state.usuario_actual) if st.session_state.usuario_actual in lista_usuarios else 0)
             categoria = st.selectbox("Categoría", ["Materiales", "Mano de Obra", "Trámites/Permisos", "Terreno", "Otros"])
+            et_labels, et_ids = build_etapa_options(df_etapas)
+            et_idx = st.selectbox("Etapa del proyecto (opcional)", et_labels)
+            gasto_etapa_id = et_ids[et_labels.index(et_idx)]
             archivo_adjunto = st.file_uploader("Adjuntar Factura/Boleta", type=["pdf", "png", "jpg", "jpeg"])
-            
+
             st.markdown("<br>", unsafe_allow_html=True)
             col_save, col_cancel = st.columns(2)
             if col_save.button("Guardar", type="primary", use_container_width=True):
@@ -571,8 +641,8 @@ else:
                                 st.warning(f"No se pudo subir a Drive: {e}")
                         else:
                             with open(os.path.join(DIR_COMPROBANTES, nombre_archivo), "wb") as f: f.write(file_bytes)
-                    
-                    nuevo_dato = pd.DataFrame([{"ID": uuid.uuid4().hex, "Fecha": fecha, "Concepto": concepto, "Moneda": moneda, "Monto_Original": monto, "Tasa_Cambio": tasa_cambio, "Monto_UYU": monto_uyu, "Pagado_por": pagado_por, "Categoria": categoria, "Archivo_Adjunto": nombre_archivo, "Modificado_por_Admin": False}])
+
+                    nuevo_dato = pd.DataFrame([{"ID": uuid.uuid4().hex, "Fecha": fecha, "Concepto": concepto, "Moneda": moneda, "Monto_Original": monto, "Tasa_Cambio": tasa_cambio, "Monto_UYU": monto_uyu, "Pagado_por": pagado_por, "Categoria": categoria, "Etapa_ID": gasto_etapa_id, "Archivo_Adjunto": nombre_archivo, "Modificado_por_Admin": False}])
                     save_data(pd.concat([df_gastos, nuevo_dato], ignore_index=True), DATA_FILE)
                     st.session_state.modo_registro = None
                     st.rerun()
@@ -652,6 +722,12 @@ else:
             else:
                 edit_pagado_por = fila_actual["Pagado_por"]
 
+            et_labels_e, et_ids_e = build_etapa_options(df_etapas)
+            cur_etapa_id = str(fila_actual.get("Etapa_ID", "")).strip()
+            et_idx_e = et_ids_e.index(cur_etapa_id) if cur_etapa_id in et_ids_e else 0
+            edit_etapa_label = st.selectbox("Etapa del proyecto", et_labels_e, index=et_idx_e)
+            edit_etapa_id = et_ids_e[et_labels_e.index(edit_etapa_label)]
+
             adjunto_actual = str(fila_actual.get("Archivo_Adjunto", "Sin adjunto"))
             if adjunto_actual.startswith("https://"):
                 st.markdown(f"📎 Comprobante actual: [ver archivo]({adjunto_actual})")
@@ -670,6 +746,7 @@ else:
                 df_gastos.at[idx_general, "Monto_UYU"] = edit_monto * edit_tasa
                 df_gastos.at[idx_general, "Categoria"] = edit_categoria
                 df_gastos.at[idx_general, "Pagado_por"] = edit_pagado_por
+                df_gastos.at[idx_general, "Etapa_ID"] = edit_etapa_id
                 if edit_archivo:
                     file_bytes = bytes(edit_archivo.getbuffer())
                     nombre_archivo = f"GASTO_{edit_fecha}_{edit_archivo.name}"
@@ -938,7 +1015,7 @@ else:
                 "Completado": "#059669",
             }
 
-            obra_tabs = st.tabs(["📋 Etapas", "📸 Avances", "📐 Planos"])
+            obra_tabs = st.tabs(["📋 Etapas", "📊 Costeo", "📸 Avances", "📐 Planos"])
 
             # ── SUBTAB 1: ETAPAS ──────────────────────────────────────
             with obra_tabs[0]:
@@ -1008,33 +1085,28 @@ else:
                             </div>
                         """, unsafe_allow_html=True)
                     else:
-                        # Resumen general
+                        reales = real_por_etapa(df_gastos, df_etapas)
                         total_et = len(df_etapas)
                         completadas = len(df_etapas[df_etapas["Estado"] == "Completado"])
-                        en_curso = len(df_etapas[df_etapas["Estado"] == "En Curso"])
                         pct_global = int(df_etapas["Progreso_Pct"].astype(float).mean()) if total_et > 0 else 0
+                        presup_total = df_etapas[df_etapas["Parent_ID"].astype(str).str.strip() == ""]["Presupuesto_UYU"].sum()
+                        real_total = sum(reales.get(et["ID"], 0) for _, et in df_etapas[df_etapas["Parent_ID"].astype(str).str.strip() == ""].iterrows())
 
-                        ks1, ks2, ks3 = st.columns(3)
+                        ks1, ks2, ks3, ks4 = st.columns(4)
                         ks1.markdown(f'<div class="kpi-card kpi-card-primary"><span class="kpi-icon">📋</span><div class="kpi-label">Etapas</div><div class="kpi-value">{total_et}</div></div>', unsafe_allow_html=True)
                         ks2.markdown(f'<div class="kpi-card kpi-card-success"><span class="kpi-icon">✅</span><div class="kpi-label">Completadas</div><div class="kpi-value">{completadas}</div></div>', unsafe_allow_html=True)
-                        ks3.markdown(f'<div class="kpi-card kpi-card-amber"><span class="kpi-icon">📈</span><div class="kpi-label">Avance Global</div><div class="kpi-value">{pct_global}%</div></div>', unsafe_allow_html=True)
+                        ks3.markdown(f'<div class="kpi-card kpi-card-neutral"><span class="kpi-icon">💰</span><div class="kpi-label">Presupuesto</div><div class="kpi-value" style="font-size:1.3rem;">${presup_total:,.0f}</div></div>', unsafe_allow_html=True)
+                        ks4.markdown(f'<div class="kpi-card kpi-card-amber"><span class="kpi-icon">🧾</span><div class="kpi-label">Ejecutado</div><div class="kpi-value" style="font-size:1.3rem;">${real_total:,.0f}</div></div>', unsafe_allow_html=True)
 
-                        st.markdown(f"""
-                            <div style='margin:6px 0 20px 0;'>
-                                <div style='display:flex; justify-content:space-between; font-size:0.75rem; font-weight:700; opacity:0.45; margin-bottom:5px;'>
-                                    <span>Progreso promedio de todas las etapas</span><span>{pct_global}%</span>
-                                </div>
-                                <div class='balance-bar-wrap' style='height:10px;'>
-                                    <div class='balance-bar-fill' style='width:{pct_global}%; background:linear-gradient(90deg,#4F46E5,#7C3AED);'></div>
-                                </div>
-                            </div>
-                        """, unsafe_allow_html=True)
-
-                        for _, et in df_etapas.iterrows():
+                        # Renderizar etapas con jerarquía
+                        top_etapas = df_etapas[df_etapas["Parent_ID"].astype(str).str.strip() == ""]
+                        for _, et in top_etapas.iterrows():
                             estado = str(et.get("Estado", "Pendiente"))
                             badge_cls, badge_icon = ESTADO_COLORS.get(estado, ("estado-pendiente", "⏳"))
                             prog_color = PROGRESS_COLORS.get(estado, "#94A3B8")
                             pct = int(float(et.get("Progreso_Pct", 0)))
+                            presup = float(et.get("Presupuesto_UYU", 0))
+                            real = reales.get(et["ID"], 0)
                             fi = str(et.get("Fecha_Inicio", ""))
                             ff = str(et.get("Fecha_Fin_Est", ""))
                             fechas_html = ""
@@ -1046,6 +1118,8 @@ else:
                                 except: pass
                             plano_url = str(et.get("Plano_URL", ""))
                             plano_html = f'&nbsp;&nbsp;<a href="{plano_url}" target="_blank" style="font-size:0.78rem; opacity:0.6;">📐 Ver plano</a>' if plano_url.startswith("http") else ""
+                            presup_html = f'<span style="font-size:0.78rem; opacity:0.55;">💰 ${presup:,.0f}</span>' if presup > 0 else ""
+                            real_html = f'<span style="font-size:0.78rem; opacity:0.55; color:{"#DC2626" if real > presup and presup > 0 else "#059669"};">🧾 ${real:,.0f}</span>' if real > 0 else ""
 
                             st.markdown(f"""
                                 <div class="etapa-card">
@@ -1059,18 +1133,137 @@ else:
                                     <div class="etapa-progress-wrap">
                                         <div class="etapa-progress-fill" style="width:{pct}%; background:{prog_color};"></div>
                                     </div>
-                                    <div style='display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; opacity:0.5; margin-top:4px; flex-wrap:wrap; gap:4px;'>
-                                        <span>{fechas_html}{plano_html}</span>
-                                        <span style='font-weight:800; opacity:0.8;'>{pct}%</span>
+                                    <div style='display:flex; justify-content:space-between; align-items:center; font-size:0.75rem; opacity:0.5; margin-top:6px; flex-wrap:wrap; gap:6px;'>
+                                        <span style='display:flex;gap:12px;'>{presup_html}{real_html}</span>
+                                        <span style='display:flex;gap:10px;'><span>{fechas_html}</span>{plano_html}<span style='font-weight:800; opacity:0.8;'>{pct}%</span></span>
                                     </div>
                                 </div>
                             """, unsafe_allow_html=True)
-                            if st.button("✏️ Editar etapa", key=f"edit_et_{et['ID']}", use_container_width=True):
+                            if st.button("✏️ Editar", key=f"edit_et_{et['ID']}", use_container_width=True):
                                 st.session_state.etapa_a_editar = et["ID"]
                                 st.rerun()
 
-            # ── SUBTAB 2: AVANCES ────────────────────────────────────
+                            # Sub-etapas indentadas
+                            children = df_etapas[df_etapas["Parent_ID"].astype(str) == str(et["ID"])]
+                            for _, ch in children.iterrows():
+                                ch_estado = str(ch.get("Estado", "Pendiente"))
+                                ch_badge_cls, ch_badge_icon = ESTADO_COLORS.get(ch_estado, ("estado-pendiente", "⏳"))
+                                ch_prog_color = PROGRESS_COLORS.get(ch_estado, "#94A3B8")
+                                ch_pct = int(float(ch.get("Progreso_Pct", 0)))
+                                ch_presup = float(ch.get("Presupuesto_UYU", 0))
+                                ch_real = reales.get(ch["ID"], 0)
+                                ch_presup_html = f'<span style="font-size:0.75rem; opacity:0.5;">💰 ${ch_presup:,.0f}</span>' if ch_presup > 0 else ""
+                                ch_real_html = f'<span style="font-size:0.75rem; opacity:0.5; color:{"#DC2626" if ch_real > ch_presup and ch_presup > 0 else "#059669"};">🧾 ${ch_real:,.0f}</span>' if ch_real > 0 else ""
+                                st.markdown(f"""
+                                    <div style='margin-left:18px; margin-bottom:8px;'>
+                                        <div class="etapa-card" style='border-left:3px solid rgba(79,70,229,0.3);'>
+                                            <div style='display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:4px;'>
+                                                <div>
+                                                    <div style='font-size:0.78rem; opacity:0.4; font-weight:700; margin-bottom:2px;'>└ sub-etapa</div>
+                                                    <div class="etapa-nombre" style='font-size:0.95rem;'>{ch['Nombre']}</div>
+                                                </div>
+                                                <span class="badge {ch_badge_cls}">{ch_badge_icon} {ch_estado}</span>
+                                            </div>
+                                            <div class="etapa-progress-wrap" style='margin-top:10px;'>
+                                                <div class="etapa-progress-fill" style="width:{ch_pct}%; background:{ch_prog_color};"></div>
+                                            </div>
+                                            <div style='display:flex; gap:12px; font-size:0.75rem; margin-top:5px; flex-wrap:wrap;'>
+                                                {ch_presup_html}{ch_real_html}
+                                                <span style='font-weight:800; opacity:0.6; margin-left:auto;'>{ch_pct}%</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                """, unsafe_allow_html=True)
+                                if st.button("✏️ Editar", key=f"edit_et_{ch['ID']}", use_container_width=True):
+                                    st.session_state.etapa_a_editar = ch["ID"]
+                                    st.rerun()
+
+            # ── SUBTAB 2: COSTEO ─────────────────────────────────────
             with obra_tabs[1]:
+                reales_c = real_por_etapa(df_gastos, df_etapas)
+                presup_top = df_etapas[df_etapas["Parent_ID"].astype(str).str.strip() == ""]
+                total_pres = presup_top["Presupuesto_UYU"].sum()
+                total_real = sum(reales_c.get(et["ID"], 0) for _, et in presup_top.iterrows())
+                diferencia = total_pres - total_real
+                pct_ejec = (total_real / total_pres * 100) if total_pres > 0 else 0
+
+                kc1, kc2, kc3 = st.columns(3)
+                kc1.markdown(f'<div class="kpi-card kpi-card-primary"><span class="kpi-icon">💰</span><div class="kpi-label">Presupuesto Total</div><div class="kpi-value" style="font-size:1.5rem;">${total_pres:,.0f}</div><div class="kpi-sub">USD</div></div>', unsafe_allow_html=True)
+                kc2.markdown(f'<div class="kpi-card kpi-card-amber"><span class="kpi-icon">🧾</span><div class="kpi-label">Ejecutado Real</div><div class="kpi-value" style="font-size:1.5rem;">${total_real:,.0f}</div><div class="kpi-sub">{pct_ejec:.1f}% del presupuesto</div></div>', unsafe_allow_html=True)
+                color_dif = "kpi-card-success" if diferencia >= 0 else "kpi-card-amber"
+                label_dif = "Disponible" if diferencia >= 0 else "Excedido"
+                kc3.markdown(f'<div class="kpi-card {color_dif}"><span class="kpi-icon">{"✅" if diferencia >= 0 else "⚠️"}</span><div class="kpi-label">{label_dif}</div><div class="kpi-value" style="font-size:1.5rem;">${abs(diferencia):,.0f}</div></div>', unsafe_allow_html=True)
+
+                st.markdown(f"""
+                    <div style='margin:6px 0 22px 0;'>
+                        <div style='display:flex; justify-content:space-between; font-size:0.75rem; font-weight:700; opacity:0.45; margin-bottom:5px;'>
+                            <span>Ejecución presupuestaria global</span><span>{pct_ejec:.1f}%</span>
+                        </div>
+                        <div class='balance-bar-wrap' style='height:10px;'>
+                            <div class='balance-bar-fill' style='width:{min(pct_ejec,100):.1f}%; background:{"#DC2626" if pct_ejec > 100 else "linear-gradient(90deg,#059669,#10B981)"};'></div>
+                        </div>
+                    </div>
+                """, unsafe_allow_html=True)
+
+                # Tabla rubrado a rubrado (solo etapas top-level)
+                st.markdown('<div class="section-title">Detalle por Rubrado</div>', unsafe_allow_html=True)
+                rows_costeo = []
+                for _, et in presup_top.iterrows():
+                    pres = float(et.get("Presupuesto_UYU", 0))
+                    real = reales_c.get(et["ID"], 0)
+                    dif = pres - real
+                    pct = (real / pres * 100) if pres > 0 else 0
+                    rows_costeo.append({
+                        "Rubrado": et["Nombre"],
+                        "Presupuesto $": f"${pres:,.0f}",
+                        "Ejecutado $": f"${real:,.0f}",
+                        "Diferencia $": f"${dif:,.0f}",
+                        "% Ejec.": f"{pct:.0f}%",
+                        "_pct": pct, "_ok": dif >= 0,
+                    })
+
+                for row in rows_costeo:
+                    bar_pct = min(row["_pct"], 100)
+                    bar_color = "#DC2626" if row["_pct"] > 100 else ("#059669" if row["_ok"] else "#D97706")
+                    dif_color = "#059669" if row["_ok"] else "#DC2626"
+                    st.markdown(f"""
+                        <div class="avance-card" style='padding:14px 18px;'>
+                            <div style='display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;'>
+                                <div style='font-size:0.92rem; font-weight:800;'>{row['Rubrado']}</div>
+                                <div style='display:flex; gap:18px; font-size:0.82rem; font-weight:700; flex-wrap:wrap;'>
+                                    <span style='opacity:0.5;'>Presup. {row['Presupuesto $']}</span>
+                                    <span>Real {row['Ejecutado $']}</span>
+                                    <span style='color:{dif_color};'>Dif. {row['Diferencia $']}</span>
+                                </div>
+                            </div>
+                            <div class='etapa-progress-wrap' style='margin-top:10px;'>
+                                <div class='etapa-progress-fill' style='width:{bar_pct:.1f}%; background:{bar_color};'></div>
+                            </div>
+                            <div style='font-size:0.72rem; opacity:0.4; text-align:right; margin-top:3px; font-weight:700;'>{row['% Ejec.']}</div>
+                        </div>
+                    """, unsafe_allow_html=True)
+
+                # Gráfico de barras presupuesto vs real
+                if any(r["_pct"] > 0 for r in rows_costeo):
+                    st.markdown("<hr class='divider'>", unsafe_allow_html=True)
+                    st.markdown('<div class="section-title">Presupuesto vs Real</div>', unsafe_allow_html=True)
+                    df_chart = pd.DataFrame([{
+                        "Rubrado": r["Rubrado"],
+                        "Presupuesto": float(r["Presupuesto $"].replace("$","").replace(",","")),
+                        "Ejecutado": float(r["Ejecutado $"].replace("$","").replace(",","")),
+                    } for r in rows_costeo if float(r["Presupuesto $"].replace("$","").replace(",","")) > 0])
+                    df_melt = df_chart.melt(id_vars="Rubrado", var_name="Tipo", value_name="Monto")
+                    fig_cost = px.bar(df_melt, x="Rubrado", y="Monto", color="Tipo", barmode="group",
+                        color_discrete_map={"Presupuesto":"#4F46E5","Ejecutado":"#059669"},
+                        text_auto=".3s")
+                    fig_cost.update_layout(margin=dict(t=10,b=60,l=0,r=0), paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(0,0,0,0)", legend=dict(orientation="h", y=-0.25, x=0.5, xanchor="center"),
+                        xaxis_title="", yaxis_title="UYU", xaxis_tickangle=-30)
+                    fig_cost.update_yaxes(showgrid=True, gridcolor="rgba(148,163,184,0.1)")
+                    st.plotly_chart(fig_cost, use_container_width=True, config={"displayModeBar": False})
+
+            # ── SUBTAB 3: AVANCES ────────────────────────────────────
+            with obra_tabs[2]:
                 TAG_OPTIONS = ["Estructura", "Materiales", "Inspección", "Problema", "Hito", "Reunión", "Foto general", "Terminaciones"]
                 nombres_etapas = df_etapas["Nombre"].tolist() if not df_etapas.empty else []
 
@@ -1224,8 +1417,8 @@ else:
                                     st.session_state.obra_modo = "editar_avance"
                                     st.rerun()
 
-            # ── SUBTAB 3: PLANOS ─────────────────────────────────────
-            with obra_tabs[2]:
+            # ── SUBTAB 4: PLANOS ─────────────────────────────────────
+            with obra_tabs[3]:
                 TIPO_PLANO = ["Arquitectura", "Estructura", "Instalaciones", "Paisajismo", "Otro"]
 
                 if st.button("＋  Agregar Plano / Documento", type="primary", use_container_width=True):
