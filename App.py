@@ -545,6 +545,7 @@ if "obra_modo" not in st.session_state: st.session_state.obra_modo = None
 if "etapa_a_editar" not in st.session_state: st.session_state.etapa_a_editar = None
 if "avance_a_editar" not in st.session_state: st.session_state.avance_a_editar = None
 if "nueva_subetapa_parent" not in st.session_state: st.session_state.nueva_subetapa_parent = None
+if "tab_activa" not in st.session_state: st.session_state.tab_activa = 0
 
 usuarios_df = load_users()
 
@@ -612,9 +613,11 @@ else:
     if st.session_state.modo_registro is None and st.session_state.gasto_a_editar is None and st.session_state.transfer_a_editar is None:
         col_btn_g, col_btn_t = st.columns(2)
         if col_btn_g.button("🛒  Registrar Gasto", type="primary", use_container_width=True):
+            st.session_state.tab_activa = 1  # volver a Historial
             st.session_state.modo_registro = "gasto"
             st.rerun()
         if col_btn_t.button("💸  Registrar Transferencia", use_container_width=True):
+            st.session_state.tab_activa = 2  # volver a Balance
             st.session_state.modo_registro = "transferencia"
             st.rerun()
         st.markdown("<div style='margin-bottom:6px;'></div>", unsafe_allow_html=True)
@@ -836,6 +839,16 @@ else:
     # VISTA 5: PESTAÑAS PRINCIPALES (VISTA NORMAL DE NAVEGACIÓN)
     # =========================================================
     else:
+        # Restaurar la tab activa después de cerrar un formulario
+        if st.session_state.tab_activa > 0:
+            idx = st.session_state.tab_activa
+            st.session_state.tab_activa = 0
+            st.markdown(f"""<script>
+                window.setTimeout(function() {{
+                    var tabs = window.parent.document.querySelectorAll('button[role="tab"]');
+                    if (tabs[{idx}]) tabs[{idx}].click();
+                }}, 80);
+            </script>""", unsafe_allow_html=True)
         opciones_menu = ["📊 Dashboard", "🕰️ Historial", "⚖️ Balance", "🏗️ Obra"]
         if es_admin: opciones_menu.append("⚙️ Admin")
         tabs = st.tabs(opciones_menu)
@@ -945,6 +958,7 @@ else:
                             if adjunto.startswith("https://"):
                                 st.markdown(f"[📎 Ver comprobante]({adjunto})")
                             if st.button("✏️ Editar / Eliminar", key=f"e_{f['ID']}", use_container_width=True):
+                                st.session_state.tab_activa = 1  # volver a Historial
                                 st.session_state.gasto_a_editar = f["ID"]
                                 st.rerun()
                 else:
@@ -963,6 +977,7 @@ else:
                             with col_b:
                                 st.metric("En UYU", f"${f['Monto_UYU']:,.0f}")
                             if st.button("🗑️ Gestionar", key=f"t_{f['ID']}", use_container_width=True):
+                                st.session_state.tab_activa = 1  # volver a Historial
                                 st.session_state.transfer_a_editar = f["ID"]
                                 st.rerun()
                 else:
