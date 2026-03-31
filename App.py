@@ -112,24 +112,29 @@ def get_gspread_client():
     creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
     return gspread.authorize(creds)
 
+@st.cache_resource
+def get_spreadsheet():
+    return get_gspread_client().open_by_key(st.secrets["spreadsheet_id"])
+
 def _get_or_create_ws(sheet_name, columns):
-    spreadsheet = get_gspread_client().open_by_key(st.secrets["spreadsheet_id"])
+    spreadsheet = get_spreadsheet()
     try:
         return spreadsheet.worksheet(sheet_name)
     except gspread.WorksheetNotFound:
         ws = spreadsheet.add_worksheet(sheet_name, rows=1000, cols=len(columns))
-        ws.update('A1', [columns])
+        ws.update(values=[columns], range_name='A1')
         return ws
 
-def load_sheet_as_df(sheet_name, columns):
-    ws = _get_or_create_ws(sheet_name, columns)
+@st.cache_data(ttl=60)
+def load_sheet_as_df(sheet_name, _columns):
+    ws = _get_or_create_ws(sheet_name, _columns)
     records = ws.get_all_records()
-    return pd.DataFrame(records) if records else pd.DataFrame(columns=columns)
+    return pd.DataFrame(records) if records else pd.DataFrame(columns=_columns)
 
 def save_df_to_sheet(df, sheet_name):
     ws = _get_or_create_ws(sheet_name, df.columns.tolist())
     ws.clear()
-    ws.update('A1', [df.columns.tolist()] + df.astype(str).values.tolist())
+    ws.update(values=[df.columns.tolist()] + df.astype(str).values.tolist(), range_name='A1')
 
 # --- GOOGLE DRIVE ---
 DRIVE_FOLDER_NAME = "La Serena - Comprobantes"
@@ -230,6 +235,7 @@ def load_transfers():
 def save_data(df, file_name):
     if USE_GSHEETS:
         save_df_to_sheet(df, SHEET_NAMES[file_name])
+        st.cache_data.clear()
     else:
         df.to_csv(file_name, index=False)
 
