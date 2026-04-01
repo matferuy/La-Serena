@@ -113,18 +113,18 @@ st.markdown("""
         box-shadow: 0 2px 12px rgba(0,0,0,0.05);
     }
     .kpi-icon {
-        font-size: 1.6rem; margin-bottom: 10px; display: block; opacity: 0.9;
+        font-size: 2rem; margin-bottom: 12px; display: block; opacity: 0.9;
     }
     .kpi-label {
-        font-size: 0.67rem; font-weight: 800; text-transform: uppercase;
-        letter-spacing: 1.4px; opacity: 0.6; margin-bottom: 6px;
+        font-size: 0.8rem; font-weight: 800; text-transform: uppercase;
+        letter-spacing: 1.4px; opacity: 0.6; margin-bottom: 8px;
     }
     .kpi-value {
-        font-size: 2.1rem; font-weight: 900;
+        font-size: 2.6rem; font-weight: 900;
         line-height: 1.05; letter-spacing: -0.04em; margin: 0;
     }
     .kpi-sub {
-        font-size: 0.75rem; opacity: 0.55; font-weight: 500; margin-top: 4px;
+        font-size: 0.9rem; opacity: 0.55; font-weight: 500; margin-top: 6px;
     }
 
     /* ── Section Headers ── */
@@ -1057,22 +1057,22 @@ else:
                     net_uyu_u = nd[0]
                     net_usd_u = nd[1]
                     filas = []
-                    if g_usd:   filas.append(f'<div style="display:flex;justify-content:space-between;padding:7px 0;"><span style="opacity:0.55;font-size:1rem;">Gastos USD</span><span style="font-weight:700;font-size:1rem;">U$S {g_usd:,.0f}</span></div>')
-                    if g_uyu:   filas.append(f'<div style="display:flex;justify-content:space-between;padding:7px 0;"><span style="opacity:0.55;font-size:1rem;">Gastos UYU</span><span style="font-weight:700;font-size:1rem;">${g_uyu:,.0f}</span></div>')
-                    if env_usd: filas.append(f'<div style="display:flex;justify-content:space-between;padding:7px 0;"><span style="opacity:0.55;font-size:1rem;">Transf. enviadas USD</span><span style="font-weight:700;font-size:1rem;color:#059669;">+U$S {env_usd:,.0f}</span></div>')
-                    if env_uyu: filas.append(f'<div style="display:flex;justify-content:space-between;padding:7px 0;"><span style="opacity:0.55;font-size:1rem;">Transf. enviadas UYU</span><span style="font-weight:700;font-size:1rem;color:#059669;">+${env_uyu:,.0f}</span></div>')
-                    if rec_usd: filas.append(f'<div style="display:flex;justify-content:space-between;padding:7px 0;"><span style="opacity:0.55;font-size:1rem;">Transf. recibidas USD</span><span style="font-weight:700;font-size:1rem;color:#DC2626;">−U$S {rec_usd:,.0f}</span></div>')
-                    if rec_uyu: filas.append(f'<div style="display:flex;justify-content:space-between;padding:7px 0;"><span style="opacity:0.55;font-size:1rem;">Transf. recibidas UYU</span><span style="font-weight:700;font-size:1rem;color:#DC2626;">−${rec_uyu:,.0f}</span></div>')
-                    detalle = "".join(filas) or '<div style="opacity:0.4;font-size:1rem;">Sin movimientos</div>'
+                    if g_usd:   filas.append(f'<div style="display:flex;justify-content:space-between;padding:9px 0;"><span style="opacity:0.55;font-size:1.15rem;">Gastos USD</span><span style="font-weight:700;font-size:1.15rem;">U$S {g_usd:,.0f}</span></div>')
+                    if g_uyu:   filas.append(f'<div style="display:flex;justify-content:space-between;padding:9px 0;"><span style="opacity:0.55;font-size:1.15rem;">Gastos UYU</span><span style="font-weight:700;font-size:1.15rem;">${g_uyu:,.0f}</span></div>')
+                    if env_usd: filas.append(f'<div style="display:flex;justify-content:space-between;padding:9px 0;"><span style="opacity:0.55;font-size:1.15rem;">Transf. enviadas USD</span><span style="font-weight:700;font-size:1.15rem;color:#059669;">+U$S {env_usd:,.0f}</span></div>')
+                    if env_uyu: filas.append(f'<div style="display:flex;justify-content:space-between;padding:9px 0;"><span style="opacity:0.55;font-size:1.15rem;">Transf. enviadas UYU</span><span style="font-weight:700;font-size:1.15rem;color:#059669;">+${env_uyu:,.0f}</span></div>')
+                    if rec_usd: filas.append(f'<div style="display:flex;justify-content:space-between;padding:9px 0;"><span style="opacity:0.55;font-size:1.15rem;">Transf. recibidas USD</span><span style="font-weight:700;font-size:1.15rem;color:#DC2626;">−U$S {rec_usd:,.0f}</span></div>')
+                    if rec_uyu: filas.append(f'<div style="display:flex;justify-content:space-between;padding:9px 0;"><span style="opacity:0.55;font-size:1.15rem;">Transf. recibidas UYU</span><span style="font-weight:700;font-size:1.15rem;color:#DC2626;">−${rec_uyu:,.0f}</span></div>')
+                    detalle = "".join(filas) or '<div style="opacity:0.4;font-size:1.15rem;">Sin movimientos</div>'
                     saldo_usd = f'U$S {net_usd_u:,.0f}' if net_usd_u else ''
                     saldo_uyu = f'  ·  ${net_uyu_u:,.0f} UYU' if net_uyu_u else ''
                     st.markdown(f"""
                         <div class="kpi-card kpi-card-neutral" style="margin-bottom:12px;">
-                            <div style="font-size:1.1rem;font-weight:800;margin-bottom:12px;">{nombre}</div>
-                            <div style="margin-bottom:12px;">{detalle}</div>
-                            <div style="border-top:1px solid rgba(0,0,0,0.07);padding-top:10px;display:flex;justify-content:space-between;align-items:center;">
-                                <span style="font-size:0.85rem;opacity:0.45;">Saldo neto aportado</span>
-                                <span style="font-size:1.1rem;font-weight:800;">{saldo_usd}{saldo_uyu}</span>
+                            <div style="font-size:1.3rem;font-weight:800;margin-bottom:14px;">{nombre}</div>
+                            <div style="margin-bottom:14px;">{detalle}</div>
+                            <div style="border-top:1px solid rgba(0,0,0,0.07);padding-top:12px;display:flex;justify-content:space-between;align-items:center;">
+                                <span style="font-size:1rem;opacity:0.45;">Saldo neto aportado</span>
+                                <span style="font-size:1.3rem;font-weight:800;">{saldo_usd}{saldo_uyu}</span>
                             </div>
                         </div>
                     """, unsafe_allow_html=True)
