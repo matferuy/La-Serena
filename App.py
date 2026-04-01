@@ -642,12 +642,12 @@ else:
             pagado_por = st.selectbox("¿Quién puso el dinero?", lista_usuarios, index=lista_usuarios.index(st.session_state.usuario_actual) if st.session_state.usuario_actual in lista_usuarios else 0)
             _cats_base = ["Materiales", "Mano de Obra", "Trámites/Permisos", "Terreno", "Otros"]
             _cats_extra = sorted(set(df_gastos["Categoria"].dropna().tolist()) - set(_cats_base))
-            _cats_opciones = _cats_base + _cats_extra + ["➕ Nueva categoría..."]
-            _cat_sel = st.selectbox("Categoría", _cats_opciones)
-            if _cat_sel == "➕ Nueva categoría...":
+            _cats_opciones = _cats_base + _cats_extra
+            _nueva_cat = st.checkbox("Crear nueva categoría")
+            if _nueva_cat:
                 categoria = st.text_input("Nombre de la nueva categoría")
             else:
-                categoria = _cat_sel
+                categoria = st.selectbox("Categoría", _cats_opciones)
             et_labels, et_ids = build_etapa_options(df_etapas)
             et_idx = st.selectbox("Etapa del proyecto (opcional)", et_labels)
             gasto_etapa_id = et_ids[et_labels.index(et_idx)]
@@ -741,13 +741,13 @@ else:
             
             _cats_base_e = ["Materiales", "Mano de Obra", "Trámites/Permisos", "Terreno", "Otros"]
             _cats_extra_e = sorted(set(df_gastos["Categoria"].dropna().tolist()) - set(_cats_base_e))
-            _cats_opciones_e = _cats_base_e + _cats_extra_e + ["➕ Nueva categoría..."]
-            _cat_actual = fila_actual["Categoria"] if fila_actual["Categoria"] in _cats_opciones_e else "Otros"
-            _cat_sel_e = st.selectbox("Categoría", _cats_opciones_e, index=_cats_opciones_e.index(_cat_actual))
-            if _cat_sel_e == "➕ Nueva categoría...":
+            _cats_opciones_e = _cats_base_e + _cats_extra_e
+            _nueva_cat_e = st.checkbox("Crear nueva categoría")
+            if _nueva_cat_e:
                 edit_categoria = st.text_input("Nombre de la nueva categoría", value="")
             else:
-                edit_categoria = _cat_sel_e
+                _cat_actual = fila_actual["Categoria"] if fila_actual["Categoria"] in _cats_opciones_e else "Otros"
+                edit_categoria = st.selectbox("Categoría", _cats_opciones_e, index=_cats_opciones_e.index(_cat_actual))
 
             if es_admin:
                 lista_usuarios = usuarios_df["Usuario"].tolist()
