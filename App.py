@@ -274,7 +274,7 @@ def _get_or_create_ws(sheet_name, columns):
         ws.update(values=[columns], range_name='A1')
         return ws
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=300)
 def load_sheet_as_df(sheet_name, _columns):
     ws = _get_or_create_ws(sheet_name, _columns)
     records = ws.get_all_records()
@@ -474,7 +474,7 @@ def load_planos():
 def save_data(df, file_name):
     if USE_GSHEETS:
         save_df_to_sheet(df, SHEET_NAMES[file_name])
-        st.cache_data.clear()
+        load_sheet_as_df.clear()
     else:
         df.to_csv(file_name, index=False)
 
