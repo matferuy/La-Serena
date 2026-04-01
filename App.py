@@ -860,10 +860,11 @@ else:
                 df_dash['Fecha'] = pd.to_datetime(df_dash['Fecha'])
                 total_uyu = df_dash["Monto_UYU"].sum()
                 tasa_actual = obtener_tasa_usd_uyu()
-                
+                total_usd = df_dash.apply(lambda r: r["Monto_Original"] if str(r.get("Moneda","")).upper()=="USD" else r["Monto_UYU"]/tasa_actual, axis=1).sum()
+
                 kpi1, kpi2, kpi3 = st.columns(3)
-                with kpi1: st.markdown(f'<div class="kpi-card kpi-card-primary"><span class="kpi-icon">🏗️</span><div class="kpi-label">Inversión Total</div><div class="kpi-value">${total_uyu:,.0f}</div><div class="kpi-sub">pesos uruguayos</div></div>', unsafe_allow_html=True)
-                with kpi2: st.markdown(f'<div class="kpi-card kpi-card-success"><span class="kpi-icon">💵</span><div class="kpi-label">Equivalente USD</div><div class="kpi-value">U$S {total_uyu/tasa_actual:,.0f}</div><div class="kpi-sub">TC: ${tasa_actual:,.1f}</div></div>', unsafe_allow_html=True)
+                with kpi1: st.markdown(f'<div class="kpi-card kpi-card-primary"><span class="kpi-icon">💵</span><div class="kpi-label">Inversión Total</div><div class="kpi-value">U$S {total_usd:,.0f}</div><div class="kpi-sub">dólares americanos</div></div>', unsafe_allow_html=True)
+                with kpi2: st.markdown(f'<div class="kpi-card kpi-card-success"><span class="kpi-icon">🏗️</span><div class="kpi-label">Equivalente UYU</div><div class="kpi-value">${total_uyu:,.0f}</div><div class="kpi-sub">TC: ${tasa_actual:,.1f}</div></div>', unsafe_allow_html=True)
                 with kpi3: st.markdown(f'<div class="kpi-card kpi-card-amber"><span class="kpi-icon">🧾</span><div class="kpi-label">Registros</div><div class="kpi-value">{len(df_dash)}</div><div class="kpi-sub">gastos cargados</div></div>', unsafe_allow_html=True)
 
                 st.markdown("<br>", unsafe_allow_html=True)
@@ -1024,7 +1025,7 @@ else:
                 st.markdown(f"""
                     <div class="kpi-card kpi-card-primary" style="margin-bottom:16px;">
                         <span class="kpi-icon">⚖️</span>
-                        <div class="kpi-label" style="margin-bottom:10px;">Saldo a saldar</div>
+                        <div class="kpi-label" style="margin-bottom:10px;">BALANCES POR MONEDA</div>
                         {_deuda_html("Dólares (USD)", dif_usd, "U$S ")}
                         {_deuda_html("Pesos (UYU)", dif_uyu, "$")}
                     </div>
