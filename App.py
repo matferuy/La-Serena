@@ -991,101 +991,93 @@ else:
                 u1, u2 = usrs[0], usrs[1]
                 tasa_bal = obtener_tasa_usd_uyu()
 
-                def _aportes_moneda(user):
-                    """Devuelve (uyu_gastos, usd_gastos, uyu_env, usd_env, uyu_rec, usd_rec)."""
+                def _neto(user):
+                    """Devuelve (net_uyu, net_usd) netos del usuario."""
                     g = df_gastos[df_gastos["Pagado_por"] == user] if not df_gastos.empty else pd.DataFrame()
                     g_uyu = g[g["Moneda"] == "UYU"]["Monto_Original"].sum() if not g.empty else 0
                     g_usd = g[g["Moneda"] == "USD"]["Monto_Original"].sum() if not g.empty else 0
-                    t = df_transfers if not df_transfers.empty else pd.DataFrame()
-                    env_uyu = t[(t["Origen"] == user) & (t["Moneda"] == "UYU")]["Monto_Original"].sum() if not t.empty else 0
-                    env_usd = t[(t["Origen"] == user) & (t["Moneda"] == "USD")]["Monto_Original"].sum() if not t.empty else 0
-                    rec_uyu = t[(t["Destino"] == user) & (t["Moneda"] == "UYU")]["Monto_Original"].sum() if not t.empty else 0
-                    rec_usd = t[(t["Destino"] == user) & (t["Moneda"] == "USD")]["Monto_Original"].sum() if not t.empty else 0
-                    return g_uyu, g_usd, env_uyu, env_usd, rec_uyu, rec_usd
+                    t = df_transfers if not df_transfers.empty else pd.DataFrame(columns=["Origen","Destino","Moneda","Monto_Original"])
+                    env_uyu = t[(t["Origen"]==user)&(t["Moneda"]=="UYU")]["Monto_Original"].sum()
+                    env_usd = t[(t["Origen"]==user)&(t["Moneda"]=="USD")]["Monto_Original"].sum()
+                    rec_uyu = t[(t["Destino"]==user)&(t["Moneda"]=="UYU")]["Monto_Original"].sum()
+                    rec_usd = t[(t["Destino"]==user)&(t["Moneda"]=="USD")]["Monto_Original"].sum()
+                    return (g_uyu + env_uyu - rec_uyu,
+                            g_usd + env_usd - rec_usd,
+                            g_uyu, g_usd, env_uyu, env_usd, rec_uyu, rec_usd)
 
-                a1 = _aportes_moneda(u1)
-                a2 = _aportes_moneda(u2)
+                n1 = _neto(u1)
+                n2 = _neto(u2)
+                net_uyu1, net_usd1 = n1[0], n1[1]
+                net_uyu2, net_usd2 = n2[0], n2[1]
 
-                # Neto en UYU para el balance 50/50
-                g1 = df_gastos[df_gastos["Pagado_por"] == u1]["Monto_UYU"].sum() if not df_gastos.empty else 0
-                g2 = df_gastos[df_gastos["Pagado_por"] == u2]["Monto_UYU"].sum() if not df_gastos.empty else 0
-                e1 = df_transfers[df_transfers["Origen"] == u1]["Monto_UYU"].sum() if not df_transfers.empty else 0
-                r1 = df_transfers[df_transfers["Destino"] == u1]["Monto_UYU"].sum() if not df_transfers.empty else 0
-                e2 = df_transfers[df_transfers["Origen"] == u2]["Monto_UYU"].sum() if not df_transfers.empty else 0
-                r2 = df_transfers[df_transfers["Destino"] == u2]["Monto_UYU"].sum() if not df_transfers.empty else 0
+                # Deuda por moneda (independiente)
+                dif_uyu = (net_uyu1 - net_uyu2) / 2   # >0 → u2 debe a u1
+                dif_usd = (net_usd1 - net_usd2) / 2   # >0 → u2 debe a u1
 
-                s1, s2 = g1 + e1 - r1, g2 + e2 - r2
-                total_aportes = s1 + s2
-                meta = total_aportes / 2
-                dif_uyu = abs(s1 - meta)
-                dif_usd = dif_uyu / tasa_bal
+                # Tarjeta de saldo
+                def _deuda_html(mon, dif, simbolo):
+                    if abs(dif) < 0.5:
+                        return f'<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(0,0,0,0.06);"><span style="font-size:0.82rem;opacity:0.6;">{mon}</span><span style="font-size:0.88rem;font-weight:700;color:#059669;">✅ Igualado</span></div>'
+                    deudor_d, acreedor_d = (u2, u1) if dif > 0 else (u1, u2)
+                    return f'<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(0,0,0,0.06);"><span style="font-size:0.82rem;opacity:0.6;">{mon} · {deudor_d} → {acreedor_d}</span><span style="font-size:0.95rem;font-weight:800;">{simbolo}{abs(dif):,.0f}</span></div>'
 
-                # Estado principal con deuda en ambas monedas
-                if dif_uyu < 1:
-                    st.markdown('<div class="kpi-card kpi-card-success" style="text-align:center;"><span class="kpi-icon">✅</span><div class="kpi-label">Estado del balance</div><div class="kpi-value" style="font-size:1.5rem;">Cuentas Claras</div><div class="kpi-sub">Los aportes están igualados</div></div>', unsafe_allow_html=True)
-                else:
-                    deudor, acreedor = (u2, u1) if s1 > meta else (u1, u2)
+                st.markdown(f"""
+                    <div class="kpi-card kpi-card-primary" style="margin-bottom:16px;">
+                        <span class="kpi-icon">⚖️</span>
+                        <div class="kpi-label" style="margin-bottom:10px;">Saldo a saldar</div>
+                        {_deuda_html("Dólares (USD)", dif_usd, "U$S ")}
+                        {_deuda_html("Pesos (UYU)", dif_uyu, "$")}
+                    </div>
+                """, unsafe_allow_html=True)
+
+                # Barra proporción (en USD equivalente)
+                equiv1 = net_uyu1 / tasa_bal + net_usd1
+                equiv2 = net_uyu2 / tasa_bal + net_usd2
+                total_equiv = equiv1 + equiv2
+                if total_equiv > 0:
+                    pct1 = equiv1 / total_equiv * 100
                     st.markdown(f"""
-                        <div class="kpi-card kpi-card-primary" style="text-align:center;">
-                            <span class="kpi-icon">⚖️</span>
-                            <div class="kpi-label">{deudor} le debe a {acreedor}</div>
-                            <div class="kpi-value">${dif_uyu:,.0f} <span style="font-size:1.1rem;opacity:0.6;">UYU</span></div>
-                            <div class="kpi-value" style="font-size:1.4rem;margin-top:4px;">U$S {dif_usd:,.0f}</div>
-                            <div class="kpi-sub">para igualar los aportes al 50/50</div>
-                        </div>
-                    """, unsafe_allow_html=True)
-
-                st.markdown("<br>", unsafe_allow_html=True)
-
-                # Barra de proporción
-                if total_aportes > 0:
-                    pct1 = s1 / total_aportes * 100
-                    pct2 = 100 - pct1
-                    st.markdown(f"""
-                        <div style='margin-bottom:6px; display:flex; justify-content:space-between; font-size:0.78rem; font-weight:700; opacity:0.6; text-transform:uppercase; letter-spacing:0.8px;'>
-                            <span>{u1} · {pct1:.0f}%</span>
-                            <span>{pct2:.0f}% · {u2}</span>
+                        <div style='margin-bottom:6px;display:flex;justify-content:space-between;font-size:0.78rem;font-weight:700;opacity:0.6;text-transform:uppercase;letter-spacing:0.8px;'>
+                            <span>{u1} · {pct1:.0f}%</span><span>{100-pct1:.0f}% · {u2}</span>
                         </div>
                         <div class='balance-bar-wrap'>
-                            <div class='balance-bar-fill' style='width:{pct1:.1f}%; background:linear-gradient(90deg,#4F46E5,#7C3AED);'></div>
+                            <div class='balance-bar-fill' style='width:{pct1:.1f}%;background:linear-gradient(90deg,#4F46E5,#7C3AED);'></div>
                         </div>
-                        <div style='display:flex; justify-content:center; margin-top:6px; font-size:0.72rem; opacity:0.35;'>objetivo: 50% / 50%</div>
+                        <div style='display:flex;justify-content:center;margin-top:6px;font-size:0.72rem;opacity:0.35;'>objetivo: 50% / 50% · total U$S {total_equiv:,.0f} equiv.</div>
                     """, unsafe_allow_html=True)
 
                 st.markdown("<br>", unsafe_allow_html=True)
 
-                # Detalle por usuario y moneda
-                def _render_detalle_usuario(nombre, ap, neto_uyu):
-                    g_uyu, g_usd, env_uyu, env_usd, rec_uyu, rec_usd = ap
-                    net_uyu_u = g_uyu + env_uyu - rec_uyu
-                    net_usd_u = g_usd + env_usd - rec_usd
+                # Detalle por usuario
+                def _render_usuario(nombre, nd):
+                    _, _, g_uyu, g_usd, env_uyu, env_usd, rec_uyu, rec_usd = nd
+                    net_uyu_u = nd[0]
+                    net_usd_u = nd[1]
                     filas = []
-                    if g_uyu:  filas.append(f'<div style="display:flex;justify-content:space-between;"><span>Gastos</span><span><b>${g_uyu:,.0f} UYU</b></span></div>')
-                    if g_usd:  filas.append(f'<div style="display:flex;justify-content:space-between;"><span>Gastos</span><span><b>U$S {g_usd:,.0f}</b></span></div>')
-                    if env_uyu: filas.append(f'<div style="display:flex;justify-content:space-between;"><span>Transferencias enviadas</span><span><b>+${env_uyu:,.0f} UYU</b></span></div>')
-                    if env_usd: filas.append(f'<div style="display:flex;justify-content:space-between;"><span>Transferencias enviadas</span><span><b>+U$S {env_usd:,.0f}</b></span></div>')
-                    if rec_uyu: filas.append(f'<div style="display:flex;justify-content:space-between;"><span>Transferencias recibidas</span><span style="color:#DC2626;"><b>−${rec_uyu:,.0f} UYU</b></span></div>')
-                    if rec_usd: filas.append(f'<div style="display:flex;justify-content:space-between;"><span>Transferencias recibidas</span><span style="color:#DC2626;"><b>−U$S {rec_usd:,.0f}</b></span></div>')
-                    detalle_html = "".join(filas) if filas else '<div style="opacity:0.4;">Sin movimientos</div>'
-                    neto_usd_equiv = neto_uyu / tasa_bal
+                    if g_usd:   filas.append(f'<tr><td style="opacity:0.6;">Gastos USD</td><td style="text-align:right;font-weight:700;">U$S {g_usd:,.0f}</td></tr>')
+                    if g_uyu:   filas.append(f'<tr><td style="opacity:0.6;">Gastos UYU</td><td style="text-align:right;font-weight:700;">${g_uyu:,.0f}</td></tr>')
+                    if env_usd: filas.append(f'<tr><td style="opacity:0.6;">Transf. enviadas USD</td><td style="text-align:right;font-weight:700;color:#059669;">+U$S {env_usd:,.0f}</td></tr>')
+                    if env_uyu: filas.append(f'<tr><td style="opacity:0.6;">Transf. enviadas UYU</td><td style="text-align:right;font-weight:700;color:#059669;">+${env_uyu:,.0f}</td></tr>')
+                    if rec_usd: filas.append(f'<tr><td style="opacity:0.6;">Transf. recibidas USD</td><td style="text-align:right;font-weight:700;color:#DC2626;">−U$S {rec_usd:,.0f}</td></tr>')
+                    if rec_uyu: filas.append(f'<tr><td style="opacity:0.6;">Transf. recibidas UYU</td><td style="text-align:right;font-weight:700;color:#DC2626;">−${rec_uyu:,.0f}</td></tr>')
+                    tabla = "".join(filas) or '<tr><td colspan="2" style="opacity:0.4;text-align:center;">Sin movimientos</td></tr>'
+                    saldo_usd_html = f'<div style="font-size:0.95rem;font-weight:800;">U$S {net_usd_u:,.0f}</div>' if net_usd_u else ''
+                    saldo_uyu_html = f'<div style="font-size:0.95rem;font-weight:800;">${net_uyu_u:,.0f} <span style="font-size:0.75rem;opacity:0.5;">UYU</span></div>' if net_uyu_u else ''
                     st.markdown(f"""
                         <div class="kpi-card kpi-card-neutral" style="margin-bottom:12px;">
-                            <div class="kpi-label" style="font-size:0.95rem;font-weight:800;margin-bottom:10px;">{nombre}</div>
-                            <div style="font-size:0.82rem;opacity:0.7;line-height:2;border-bottom:1px solid rgba(0,0,0,0.07);padding-bottom:10px;margin-bottom:10px;">
-                                {detalle_html}
-                            </div>
-                            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
-                                <span style="font-size:0.78rem;opacity:0.5;">Neto aportado</span>
-                                <div style="text-align:right;">
-                                    <div style="font-size:1.1rem;font-weight:800;">${neto_uyu:,.0f} <span style="font-size:0.8rem;opacity:0.5;">UYU</span></div>
-                                    <div style="font-size:0.9rem;font-weight:700;opacity:0.65;">≈ U$S {neto_usd_equiv:,.0f}</div>
-                                </div>
+                            <div style="font-size:0.95rem;font-weight:800;margin-bottom:10px;">{nombre}</div>
+                            <table style="width:100%;font-size:0.82rem;border-collapse:collapse;margin-bottom:10px;">
+                                {tabla}
+                            </table>
+                            <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid rgba(0,0,0,0.07);padding-top:8px;">
+                                <span style="font-size:0.75rem;opacity:0.5;">Saldo neto aportado</span>
+                                <div style="text-align:right;">{saldo_usd_html}{saldo_uyu_html}</div>
                             </div>
                         </div>
                     """, unsafe_allow_html=True)
 
-                _render_detalle_usuario(u1, a1, s1)
-                _render_detalle_usuario(u2, a2, s2)
+                _render_usuario(u1, n1)
+                _render_usuario(u2, n2)
 
         # --- PESTAÑA 4: OBRA ---
         with tabs[3]:
