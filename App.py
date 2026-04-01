@@ -869,42 +869,42 @@ else:
 
                 st.markdown("<br>", unsafe_allow_html=True)
 
+                # Columna en USD para todos los gráficos
+                df_dash["Monto_USD"] = df_dash.apply(
+                    lambda r: r["Monto_Original"] if str(r.get("Moneda","")).upper()=="USD"
+                              else r["Monto_UYU"] / tasa_actual, axis=1)
+
                 col_chart1, col_chart2 = st.columns(2)
                 with col_chart1:
                     st.markdown('<div class="section-title">En qué se gastó</div>', unsafe_allow_html=True)
-                    fig_pie = px.pie(df_dash.groupby("Categoria")["Monto_UYU"].sum().reset_index(), values='Monto_UYU', names='Categoria', hole=0.6, color_discrete_sequence=["#4F46E5","#7C3AED","#059669","#0EA5E9","#F59E0B"])
+                    fig_pie = px.pie(df_dash.groupby("Categoria")["Monto_USD"].sum().reset_index(), values='Monto_USD', names='Categoria', hole=0.6, color_discrete_sequence=["#4F46E5","#7C3AED","#059669","#0EA5E9","#F59E0B"])
                     fig_pie.update_layout(margin=dict(t=10, b=30, l=0, r=0), showlegend=True, legend=dict(orientation="h", y=-0.1, x=0.5, xanchor="center", font=dict(size=11)), paper_bgcolor="rgba(0,0,0,0)")
-                    fig_pie.update_traces(textinfo='percent', textfont_size=12)
+                    fig_pie.update_traces(textinfo='percent', textfont_size=12, hovertemplate='%{label}<br>U$S %{value:,.0f}<extra></extra>')
                     st.plotly_chart(fig_pie, use_container_width=True, config={'displayModeBar': False})
                 with col_chart2:
                     st.markdown('<div class="section-title">Gasto por socio</div>', unsafe_allow_html=True)
-                    fig_bar = px.bar(df_dash.groupby("Pagado_por")["Monto_UYU"].sum().reset_index(), x='Pagado_por', y='Monto_UYU', text_auto='.3s', color='Pagado_por', color_discrete_sequence=["#4F46E5","#059669","#7C3AED"])
-                    fig_bar.update_layout(margin=dict(t=10, b=0, l=0, r=0), showlegend=False, xaxis_title="", yaxis_title="UYU", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
-                    fig_bar.update_traces(marker_line_width=0, textfont_size=12)
+                    fig_bar = px.bar(df_dash.groupby("Pagado_por")["Monto_USD"].sum().reset_index(), x='Pagado_por', y='Monto_USD', text_auto='.3s', color='Pagado_por', color_discrete_sequence=["#4F46E5","#059669","#7C3AED"])
+                    fig_bar.update_layout(margin=dict(t=10, b=0, l=0, r=0), showlegend=False, xaxis_title="", yaxis_title="U$S", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+                    fig_bar.update_traces(marker_line_width=0, textfont_size=12, hovertemplate='%{x}<br>U$S %{y:,.0f}<extra></extra>')
                     fig_bar.update_yaxes(showgrid=True, gridcolor="rgba(148,163,184,0.1)")
                     st.plotly_chart(fig_bar, use_container_width=True, config={'displayModeBar': False})
 
                 st.markdown("<hr class='divider'>", unsafe_allow_html=True)
                 st.markdown('<div class="section-title">Evolución del gasto por tipo</div>', unsafe_allow_html=True)
-                
+
                 fechas_unicas = df_dash["Fecha"].dropna().unique()
                 categorias_unicas = df_dash["Categoria"].dropna().unique()
                 grid = pd.MultiIndex.from_product([fechas_unicas, categorias_unicas], names=["Fecha", "Categoria"]).to_frame(index=False)
-                
-                gastos_diarios = df_dash.groupby(["Fecha", "Categoria"])["Monto_UYU"].sum().reset_index()
+
+                gastos_diarios = df_dash.groupby(["Fecha", "Categoria"])["Monto_USD"].sum().reset_index()
                 gastos_evolucion = pd.merge(grid, gastos_diarios, on=["Fecha", "Categoria"], how="left").fillna(0)
-                
                 gastos_evolucion = gastos_evolucion.sort_values("Fecha")
-                gastos_evolucion["Gasto_Acumulado"] = gastos_evolucion.groupby("Categoria")["Monto_UYU"].cumsum()
-                
+                gastos_evolucion["Gasto_Acumulado"] = gastos_evolucion.groupby("Categoria")["Monto_USD"].cumsum()
+
                 fig_area = px.area(gastos_evolucion, x='Fecha', y='Gasto_Acumulado', color='Categoria', color_discrete_sequence=["#4F46E5","#7C3AED","#059669","#0EA5E9","#F59E0B"])
-                
-                # Ajuste de layout general
-                fig_area.update_layout(margin=dict(t=10, b=10, l=0, r=0), xaxis_title="", yaxis_title="Acumulado (UYU)", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", legend=dict(orientation="h", yanchor="bottom", y=-0.5, xanchor="center", x=0.5, title_text=""))
-                
-                # Ocultar las horas en el eje horizontal y en la etiqueta al pasar el ratón/dedo
+                fig_area.update_layout(margin=dict(t=10, b=10, l=0, r=0), xaxis_title="", yaxis_title="Acumulado (U$S)", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", legend=dict(orientation="h", yanchor="bottom", y=-0.5, xanchor="center", x=0.5, title_text=""))
                 fig_area.update_xaxes(tickformat="%d/%m/%Y", hoverformat="%d/%m/%Y")
-                
+                fig_area.update_traces(hovertemplate='%{x|%d/%m/%Y}<br>U$S %{y:,.0f}<extra></extra>')
                 st.plotly_chart(fig_area, use_container_width=True, config={'displayModeBar': False})
             else:
                 st.markdown("""
