@@ -1053,20 +1053,26 @@ else:
 
                 # Detalle por usuario
                 def _render_usuario(nombre, nd):
+                    _, _, g_uyu, g_usd, env_uyu, env_usd, rec_uyu, rec_usd = nd
                     net_uyu_u = nd[0]
                     net_usd_u = nd[1]
-                    partes = []
-                    if net_usd_u: partes.append(f'U$S {net_usd_u:,.0f}')
-                    if net_uyu_u: partes.append(f'${net_uyu_u:,.0f} UYU')
-                    saldo_str = ' · '.join(partes) if partes else '—'
+                    filas = []
+                    if g_usd:   filas.append(f'<div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="opacity:0.55;">Gastos USD</span><span style="font-weight:700;">U$S {g_usd:,.0f}</span></div>')
+                    if g_uyu:   filas.append(f'<div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="opacity:0.55;">Gastos UYU</span><span style="font-weight:700;">${g_uyu:,.0f}</span></div>')
+                    if env_usd: filas.append(f'<div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="opacity:0.55;">Transf. enviadas USD</span><span style="font-weight:700;color:#059669;">+U$S {env_usd:,.0f}</span></div>')
+                    if env_uyu: filas.append(f'<div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="opacity:0.55;">Transf. enviadas UYU</span><span style="font-weight:700;color:#059669;">+${env_uyu:,.0f}</span></div>')
+                    if rec_usd: filas.append(f'<div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="opacity:0.55;">Transf. recibidas USD</span><span style="font-weight:700;color:#DC2626;">−U$S {rec_usd:,.0f}</span></div>')
+                    if rec_uyu: filas.append(f'<div style="display:flex;justify-content:space-between;padding:4px 0;"><span style="opacity:0.55;">Transf. recibidas UYU</span><span style="font-weight:700;color:#DC2626;">−${rec_uyu:,.0f}</span></div>')
+                    detalle = "".join(filas) or '<div style="opacity:0.4;font-size:0.82rem;">Sin movimientos</div>'
+                    saldo_usd = f'U$S {net_usd_u:,.0f}' if net_usd_u else ''
+                    saldo_uyu = f'  ·  ${net_uyu_u:,.0f} UYU' if net_uyu_u else ''
                     st.markdown(f"""
                         <div class="kpi-card kpi-card-neutral" style="margin-bottom:12px;">
-                            <div style="display:flex;justify-content:space-between;align-items:center;">
-                                <span style="font-size:0.95rem;font-weight:800;">{nombre}</span>
-                                <div style="text-align:right;">
-                                    <div style="font-size:0.78rem;opacity:0.45;margin-bottom:2px;">saldo neto aportado</div>
-                                    <div style="font-size:1rem;font-weight:800;">{saldo_str}</div>
-                                </div>
+                            <div style="font-size:0.95rem;font-weight:800;margin-bottom:10px;">{nombre}</div>
+                            <div style="font-size:0.82rem;margin-bottom:10px;">{detalle}</div>
+                            <div style="border-top:1px solid rgba(0,0,0,0.07);padding-top:8px;display:flex;justify-content:space-between;align-items:center;">
+                                <span style="font-size:0.75rem;opacity:0.45;">Saldo neto aportado</span>
+                                <span style="font-size:0.95rem;font-weight:800;">{saldo_usd}{saldo_uyu}</span>
                             </div>
                         </div>
                     """, unsafe_allow_html=True)
