@@ -640,7 +640,14 @@ else:
             
             lista_usuarios = usuarios_df["Usuario"].tolist()
             pagado_por = st.selectbox("¿Quién puso el dinero?", lista_usuarios, index=lista_usuarios.index(st.session_state.usuario_actual) if st.session_state.usuario_actual in lista_usuarios else 0)
-            categoria = st.selectbox("Categoría", ["Materiales", "Mano de Obra", "Trámites/Permisos", "Terreno", "Otros"])
+            _cats_base = ["Materiales", "Mano de Obra", "Trámites/Permisos", "Terreno", "Otros"]
+            _cats_extra = sorted(set(df_gastos["Categoria"].dropna().tolist()) - set(_cats_base))
+            _cats_opciones = _cats_base + _cats_extra + ["➕ Nueva categoría..."]
+            _cat_sel = st.selectbox("Categoría", _cats_opciones)
+            if _cat_sel == "➕ Nueva categoría...":
+                categoria = st.text_input("Nombre de la nueva categoría")
+            else:
+                categoria = _cat_sel
             et_labels, et_ids = build_etapa_options(df_etapas)
             et_idx = st.selectbox("Etapa del proyecto (opcional)", et_labels)
             gasto_etapa_id = et_ids[et_labels.index(et_idx)]
@@ -649,7 +656,7 @@ else:
             st.markdown("<br>", unsafe_allow_html=True)
             col_save, col_cancel = st.columns(2)
             if col_save.button("Guardar", type="primary", use_container_width=True):
-                if monto and concepto:
+                if monto and concepto and categoria and categoria.strip():
                     monto_uyu = monto * tasa_cambio
                     nombre_archivo = "Sin adjunto"
                     if archivo_adjunto:
@@ -667,7 +674,7 @@ else:
                     save_data(pd.concat([df_gastos, nuevo_dato], ignore_index=True), DATA_FILE)
                     st.session_state.modo_registro = None
                     st.rerun()
-                else: st.error("Falta monto o concepto.")
+                else: st.error("Falta monto, concepto o nombre de categoría.")
             if col_cancel.button("Cancelar", use_container_width=True):
                 st.session_state.modo_registro = None
                 st.rerun()
@@ -732,9 +739,15 @@ else:
             if edit_moneda == "USD":
                 edit_tasa = st.number_input("Tasa aplicada", min_value=1.0, value=float(fila_actual["Tasa_Cambio"]), format="%.2f")
             
-            categorias = ["Materiales", "Mano de Obra", "Trámites/Permisos", "Terreno", "Otros"]
-            idx_cat = categorias.index(fila_actual["Categoria"]) if fila_actual["Categoria"] in categorias else 0
-            edit_categoria = st.selectbox("Categoría", categorias, index=idx_cat)
+            _cats_base_e = ["Materiales", "Mano de Obra", "Trámites/Permisos", "Terreno", "Otros"]
+            _cats_extra_e = sorted(set(df_gastos["Categoria"].dropna().tolist()) - set(_cats_base_e))
+            _cats_opciones_e = _cats_base_e + _cats_extra_e + ["➕ Nueva categoría..."]
+            _cat_actual = fila_actual["Categoria"] if fila_actual["Categoria"] in _cats_opciones_e else "Otros"
+            _cat_sel_e = st.selectbox("Categoría", _cats_opciones_e, index=_cats_opciones_e.index(_cat_actual))
+            if _cat_sel_e == "➕ Nueva categoría...":
+                edit_categoria = st.text_input("Nombre de la nueva categoría", value="")
+            else:
+                edit_categoria = _cat_sel_e
 
             if es_admin:
                 lista_usuarios = usuarios_df["Usuario"].tolist()
@@ -1020,9 +1033,9 @@ else:
                 # Tarjeta de saldo
                 def _deuda_html(mon, dif, simbolo):
                     if abs(dif) < 0.5:
-                        return f'<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(0,0,0,0.06);"><span style="font-size:0.82rem;opacity:0.6;">{mon}</span><span style="font-size:0.88rem;font-weight:700;color:#059669;">✅ Igualado</span></div>'
+                        return f'<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.15);"><span style="font-size:1.05rem;opacity:0.85;">{mon}</span><span style="font-size:1.2rem;font-weight:700;">✅ Igualado</span></div>'
                     deudor_d, acreedor_d = (u2, u1) if dif > 0 else (u1, u2)
-                    return f'<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(0,0,0,0.06);"><span style="font-size:0.82rem;opacity:0.6;">{mon} · {deudor_d} → {acreedor_d}</span><span style="font-size:0.95rem;font-weight:800;">{simbolo}{abs(dif):,.0f}</span></div>'
+                    return f'<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.15);"><span style="font-size:1.05rem;opacity:0.85;">{mon} · {deudor_d} → {acreedor_d}</span><span style="font-size:1.5rem;font-weight:900;">{simbolo}{abs(dif):,.0f}</span></div>'
 
                 st.markdown(f"""
                     <div class="kpi-card kpi-card-primary" style="margin-bottom:16px;">
