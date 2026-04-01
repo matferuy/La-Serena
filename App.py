@@ -989,6 +989,24 @@ else:
             usrs = [u for u in usuarios_df["Usuario"].tolist() if u.lower() != "admin"]
             if len(usrs) >= 2:
                 u1, u2 = usrs[0], usrs[1]
+                tasa_bal = obtener_tasa_usd_uyu()
+
+                def _aportes_moneda(user):
+                    """Devuelve (uyu_gastos, usd_gastos, uyu_env, usd_env, uyu_rec, usd_rec)."""
+                    g = df_gastos[df_gastos["Pagado_por"] == user] if not df_gastos.empty else pd.DataFrame()
+                    g_uyu = g[g["Moneda"] == "UYU"]["Monto_Original"].sum() if not g.empty else 0
+                    g_usd = g[g["Moneda"] == "USD"]["Monto_Original"].sum() if not g.empty else 0
+                    t = df_transfers if not df_transfers.empty else pd.DataFrame()
+                    env_uyu = t[(t["Origen"] == user) & (t["Moneda"] == "UYU")]["Monto_Original"].sum() if not t.empty else 0
+                    env_usd = t[(t["Origen"] == user) & (t["Moneda"] == "USD")]["Monto_Original"].sum() if not t.empty else 0
+                    rec_uyu = t[(t["Destino"] == user) & (t["Moneda"] == "UYU")]["Monto_Original"].sum() if not t.empty else 0
+                    rec_usd = t[(t["Destino"] == user) & (t["Moneda"] == "USD")]["Monto_Original"].sum() if not t.empty else 0
+                    return g_uyu, g_usd, env_uyu, env_usd, rec_uyu, rec_usd
+
+                a1 = _aportes_moneda(u1)
+                a2 = _aportes_moneda(u2)
+
+                # Neto en UYU para el balance 50/50
                 g1 = df_gastos[df_gastos["Pagado_por"] == u1]["Monto_UYU"].sum() if not df_gastos.empty else 0
                 g2 = df_gastos[df_gastos["Pagado_por"] == u2]["Monto_UYU"].sum() if not df_gastos.empty else 0
                 e1 = df_transfers[df_transfers["Origen"] == u1]["Monto_UYU"].sum() if not df_transfers.empty else 0
@@ -999,15 +1017,23 @@ else:
                 s1, s2 = g1 + e1 - r1, g2 + e2 - r2
                 total_aportes = s1 + s2
                 meta = total_aportes / 2
-                dif = abs(s1 - meta)
+                dif_uyu = abs(s1 - meta)
+                dif_usd = dif_uyu / tasa_bal
 
-                # Estado principal
-                if dif < 1:
+                # Estado principal con deuda en ambas monedas
+                if dif_uyu < 1:
                     st.markdown('<div class="kpi-card kpi-card-success" style="text-align:center;"><span class="kpi-icon">✅</span><div class="kpi-label">Estado del balance</div><div class="kpi-value" style="font-size:1.5rem;">Cuentas Claras</div><div class="kpi-sub">Los aportes están igualados</div></div>', unsafe_allow_html=True)
-                elif s1 > meta:
-                    st.markdown(f'<div class="kpi-card kpi-card-primary" style="text-align:center;"><span class="kpi-icon">⚖️</span><div class="kpi-label">{u2} le debe a {u1}</div><div class="kpi-value">${dif:,.0f} <span style="font-size:1.1rem;opacity:0.6;">UYU</span></div><div class="kpi-sub">para igualar los aportes al 50/50</div></div>', unsafe_allow_html=True)
                 else:
-                    st.markdown(f'<div class="kpi-card kpi-card-primary" style="text-align:center;"><span class="kpi-icon">⚖️</span><div class="kpi-label">{u1} le debe a {u2}</div><div class="kpi-value">${dif:,.0f} <span style="font-size:1.1rem;opacity:0.6;">UYU</span></div><div class="kpi-sub">para igualar los aportes al 50/50</div></div>', unsafe_allow_html=True)
+                    deudor, acreedor = (u2, u1) if s1 > meta else (u1, u2)
+                    st.markdown(f"""
+                        <div class="kpi-card kpi-card-primary" style="text-align:center;">
+                            <span class="kpi-icon">⚖️</span>
+                            <div class="kpi-label">{deudor} le debe a {acreedor}</div>
+                            <div class="kpi-value">${dif_uyu:,.0f} <span style="font-size:1.1rem;opacity:0.6;">UYU</span></div>
+                            <div class="kpi-value" style="font-size:1.4rem;margin-top:4px;">U$S {dif_usd:,.0f}</div>
+                            <div class="kpi-sub">para igualar los aportes al 50/50</div>
+                        </div>
+                    """, unsafe_allow_html=True)
 
                 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -1028,12 +1054,38 @@ else:
 
                 st.markdown("<br>", unsafe_allow_html=True)
 
-                # KPIs individuales
-                c1, c2 = st.columns(2)
-                with c1:
-                    st.markdown(f'<div class="kpi-card kpi-card-neutral"><div class="kpi-label">{u1}</div><div class="kpi-value" style="font-size:1.6rem;">${s1:,.0f}</div><div class="kpi-sub" style="color:var(--text-color);">aportado neto</div></div>', unsafe_allow_html=True)
-                with c2:
-                    st.markdown(f'<div class="kpi-card kpi-card-neutral"><div class="kpi-label">{u2}</div><div class="kpi-value" style="font-size:1.6rem;">${s2:,.0f}</div><div class="kpi-sub" style="color:var(--text-color);">aportado neto</div></div>', unsafe_allow_html=True)
+                # Detalle por usuario y moneda
+                def _render_detalle_usuario(nombre, ap, neto_uyu):
+                    g_uyu, g_usd, env_uyu, env_usd, rec_uyu, rec_usd = ap
+                    net_uyu_u = g_uyu + env_uyu - rec_uyu
+                    net_usd_u = g_usd + env_usd - rec_usd
+                    filas = []
+                    if g_uyu:  filas.append(f'<div style="display:flex;justify-content:space-between;"><span>Gastos</span><span><b>${g_uyu:,.0f} UYU</b></span></div>')
+                    if g_usd:  filas.append(f'<div style="display:flex;justify-content:space-between;"><span>Gastos</span><span><b>U$S {g_usd:,.0f}</b></span></div>')
+                    if env_uyu: filas.append(f'<div style="display:flex;justify-content:space-between;"><span>Transferencias enviadas</span><span><b>+${env_uyu:,.0f} UYU</b></span></div>')
+                    if env_usd: filas.append(f'<div style="display:flex;justify-content:space-between;"><span>Transferencias enviadas</span><span><b>+U$S {env_usd:,.0f}</b></span></div>')
+                    if rec_uyu: filas.append(f'<div style="display:flex;justify-content:space-between;"><span>Transferencias recibidas</span><span style="color:#DC2626;"><b>−${rec_uyu:,.0f} UYU</b></span></div>')
+                    if rec_usd: filas.append(f'<div style="display:flex;justify-content:space-between;"><span>Transferencias recibidas</span><span style="color:#DC2626;"><b>−U$S {rec_usd:,.0f}</b></span></div>')
+                    detalle_html = "".join(filas) if filas else '<div style="opacity:0.4;">Sin movimientos</div>'
+                    neto_usd_equiv = neto_uyu / tasa_bal
+                    st.markdown(f"""
+                        <div class="kpi-card kpi-card-neutral" style="margin-bottom:12px;">
+                            <div class="kpi-label" style="font-size:0.95rem;font-weight:800;margin-bottom:10px;">{nombre}</div>
+                            <div style="font-size:0.82rem;opacity:0.7;line-height:2;border-bottom:1px solid rgba(0,0,0,0.07);padding-bottom:10px;margin-bottom:10px;">
+                                {detalle_html}
+                            </div>
+                            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
+                                <span style="font-size:0.78rem;opacity:0.5;">Neto aportado</span>
+                                <div style="text-align:right;">
+                                    <div style="font-size:1.1rem;font-weight:800;">${neto_uyu:,.0f} <span style="font-size:0.8rem;opacity:0.5;">UYU</span></div>
+                                    <div style="font-size:0.9rem;font-weight:700;opacity:0.65;">≈ U$S {neto_usd_equiv:,.0f}</div>
+                                </div>
+                            </div>
+                        </div>
+                    """, unsafe_allow_html=True)
+
+                _render_detalle_usuario(u1, a1, s1)
+                _render_detalle_usuario(u2, a2, s2)
 
         # --- PESTAÑA 4: OBRA ---
         with tabs[3]:
