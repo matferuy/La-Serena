@@ -1053,28 +1053,20 @@ else:
 
                 # Detalle por usuario
                 def _render_usuario(nombre, nd):
-                    _, _, g_uyu, g_usd, env_uyu, env_usd, rec_uyu, rec_usd = nd
                     net_uyu_u = nd[0]
                     net_usd_u = nd[1]
-                    filas = []
-                    if g_usd:   filas.append(f'<tr><td style="opacity:0.6;">Gastos USD</td><td style="text-align:right;font-weight:700;">U$S {g_usd:,.0f}</td></tr>')
-                    if g_uyu:   filas.append(f'<tr><td style="opacity:0.6;">Gastos UYU</td><td style="text-align:right;font-weight:700;">${g_uyu:,.0f}</td></tr>')
-                    if env_usd: filas.append(f'<tr><td style="opacity:0.6;">Transf. enviadas USD</td><td style="text-align:right;font-weight:700;color:#059669;">+U$S {env_usd:,.0f}</td></tr>')
-                    if env_uyu: filas.append(f'<tr><td style="opacity:0.6;">Transf. enviadas UYU</td><td style="text-align:right;font-weight:700;color:#059669;">+${env_uyu:,.0f}</td></tr>')
-                    if rec_usd: filas.append(f'<tr><td style="opacity:0.6;">Transf. recibidas USD</td><td style="text-align:right;font-weight:700;color:#DC2626;">−U$S {rec_usd:,.0f}</td></tr>')
-                    if rec_uyu: filas.append(f'<tr><td style="opacity:0.6;">Transf. recibidas UYU</td><td style="text-align:right;font-weight:700;color:#DC2626;">−${rec_uyu:,.0f}</td></tr>')
-                    tabla = "".join(filas) or '<tr><td colspan="2" style="opacity:0.4;text-align:center;">Sin movimientos</td></tr>'
-                    saldo_usd_html = f'<div style="font-size:0.95rem;font-weight:800;">U$S {net_usd_u:,.0f}</div>' if net_usd_u else ''
-                    saldo_uyu_html = f'<div style="font-size:0.95rem;font-weight:800;">${net_uyu_u:,.0f} <span style="font-size:0.75rem;opacity:0.5;">UYU</span></div>' if net_uyu_u else ''
+                    partes = []
+                    if net_usd_u: partes.append(f'U$S {net_usd_u:,.0f}')
+                    if net_uyu_u: partes.append(f'${net_uyu_u:,.0f} UYU')
+                    saldo_str = ' · '.join(partes) if partes else '—'
                     st.markdown(f"""
                         <div class="kpi-card kpi-card-neutral" style="margin-bottom:12px;">
-                            <div style="font-size:0.95rem;font-weight:800;margin-bottom:10px;">{nombre}</div>
-                            <table style="width:100%;font-size:0.82rem;border-collapse:collapse;margin-bottom:10px;">
-                                {tabla}
-                            </table>
-                            <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid rgba(0,0,0,0.07);padding-top:8px;">
-                                <span style="font-size:0.75rem;opacity:0.5;">Saldo neto aportado</span>
-                                <div style="text-align:right;">{saldo_usd_html}{saldo_uyu_html}</div>
+                            <div style="display:flex;justify-content:space-between;align-items:center;">
+                                <span style="font-size:0.95rem;font-weight:800;">{nombre}</span>
+                                <div style="text-align:right;">
+                                    <div style="font-size:0.78rem;opacity:0.45;margin-bottom:2px;">saldo neto aportado</div>
+                                    <div style="font-size:1rem;font-weight:800;">{saldo_str}</div>
+                                </div>
                             </div>
                         </div>
                     """, unsafe_allow_html=True)
