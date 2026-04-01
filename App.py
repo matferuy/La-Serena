@@ -883,7 +883,9 @@ else:
                     st.plotly_chart(fig_pie, use_container_width=True, config={'displayModeBar': False})
                 with col_chart2:
                     st.markdown('<div class="section-title">Gasto por socio</div>', unsafe_allow_html=True)
-                    fig_bar = px.bar(df_dash.groupby("Pagado_por")["Monto_USD"].sum().reset_index(), x='Pagado_por', y='Monto_USD', text_auto='.3s', color='Pagado_por', color_discrete_sequence=["#4F46E5","#059669","#7C3AED"])
+                    df_bar = df_dash.groupby("Pagado_por")["Monto_USD"].sum().reset_index()
+                    df_bar["label"] = df_bar["Monto_USD"].apply(lambda v: f"U$S {v:,.0f}")
+                    fig_bar = px.bar(df_bar, x='Pagado_por', y='Monto_USD', text='label', color='Pagado_por', color_discrete_sequence=["#4F46E5","#059669","#7C3AED"])
                     fig_bar.update_layout(margin=dict(t=10, b=0, l=0, r=0), showlegend=False, xaxis_title="", yaxis_title="U$S", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
                     fig_bar.update_traces(marker_line_width=0, textfont_size=12, hovertemplate='%{x}<br>U$S %{y:,.0f}<extra></extra>')
                     fig_bar.update_yaxes(showgrid=True, gridcolor="rgba(148,163,184,0.1)")
