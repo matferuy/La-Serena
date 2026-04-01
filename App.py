@@ -670,7 +670,7 @@ else:
                         else:
                             with open(os.path.join(DIR_COMPROBANTES, nombre_archivo), "wb") as f: f.write(file_bytes)
 
-                    nuevo_dato = pd.DataFrame([{"ID": uuid.uuid4().hex, "Fecha": fecha, "Concepto": concepto, "Moneda": moneda, "Monto_Original": monto, "Tasa_Cambio": tasa_cambio, "Monto_UYU": monto_uyu, "Pagado_por": pagado_por, "Categoria": categoria, "Etapa_ID": gasto_etapa_id, "Archivo_Adjunto": nombre_archivo, "Modificado_por_Admin": False}])
+                    nuevo_dato = pd.DataFrame([{"ID": uuid.uuid4().hex, "Fecha": str(fecha), "Concepto": concepto, "Moneda": moneda, "Monto_Original": monto, "Tasa_Cambio": tasa_cambio, "Monto_UYU": monto_uyu, "Pagado_por": pagado_por, "Categoria": categoria, "Etapa_ID": gasto_etapa_id, "Archivo_Adjunto": nombre_archivo, "Modificado_por_Admin": False}])
                     save_data(pd.concat([df_gastos, nuevo_dato], ignore_index=True), DATA_FILE)
                     st.session_state.modo_registro = None
                     st.rerun()
@@ -772,7 +772,7 @@ else:
 
             if col_save.button("Guardar", type="primary", use_container_width=True):
                 idx_general = df_gastos[df_gastos["ID"] == id_seleccionado].index[0]
-                df_gastos.at[idx_general, "Fecha"] = edit_fecha
+                df_gastos.at[idx_general, "Fecha"] = str(edit_fecha)
                 df_gastos.at[idx_general, "Concepto"] = edit_concepto
                 df_gastos.at[idx_general, "Moneda"] = edit_moneda
                 df_gastos.at[idx_general, "Monto_Original"] = edit_monto
