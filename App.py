@@ -1437,11 +1437,14 @@ else:
                 if any(r["_pct"] > 0 for r in rows_costeo):
                     st.markdown("<hr class='divider'>", unsafe_allow_html=True)
                     st.markdown('<div class="section-title">Presupuesto vs Real</div>', unsafe_allow_html=True)
+                    def _parse_pesos(val):
+                        try: return float(str(val).replace("$","").replace(",","").strip() or "0")
+                        except: return 0.0
                     df_chart = pd.DataFrame([{
                         "Rubrado": r["Rubrado"],
-                        "Presupuesto": float(r["Presupuesto $"].replace("$","").replace(",","")),
-                        "Ejecutado": float(r["Ejecutado $"].replace("$","").replace(",","")),
-                    } for r in rows_costeo if float(r["Presupuesto $"].replace("$","").replace(",","")) > 0])
+                        "Presupuesto": _parse_pesos(r["Presupuesto $"]),
+                        "Ejecutado": _parse_pesos(r["Ejecutado $"]),
+                    } for r in rows_costeo if _parse_pesos(r["Presupuesto $"]) > 0])
                     df_melt = df_chart.melt(id_vars="Rubrado", var_name="Tipo", value_name="Monto")
                     fig_cost = px.bar(df_melt, x="Rubrado", y="Monto", color="Tipo", barmode="group",
                         color_discrete_map={"Presupuesto":"#4F46E5","Ejecutado":"#059669"},
