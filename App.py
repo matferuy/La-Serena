@@ -1440,20 +1440,20 @@ else:
                     def _parse_pesos(val):
                         try: return float(str(val).replace("$","").replace(",","").strip() or "0")
                         except: return 0.0
-                    df_chart = pd.DataFrame([{
-                        "Rubrado": r["Rubrado"],
-                        "Presupuesto": _parse_pesos(r["Presupuesto $"]),
-                        "Ejecutado": _parse_pesos(r["Ejecutado $"]),
-                    } for r in rows_costeo if _parse_pesos(r["Presupuesto $"]) > 0])
-                    df_melt = df_chart.melt(id_vars="Rubrado", var_name="Tipo", value_name="Monto")
-                    fig_cost = px.bar(df_melt, x="Rubrado", y="Monto", color="Tipo", barmode="group",
-                        color_discrete_map={"Presupuesto":"#4F46E5","Ejecutado":"#059669"},
-                        text_auto=".3s")
-                    fig_cost.update_layout(margin=dict(t=10,b=60,l=0,r=0), paper_bgcolor="rgba(0,0,0,0)",
-                        plot_bgcolor="rgba(0,0,0,0)", legend=dict(orientation="h", y=-0.25, x=0.5, xanchor="center"),
-                        xaxis_title="", yaxis_title="UYU", xaxis_tickangle=-30)
-                    fig_cost.update_yaxes(showgrid=True, gridcolor="rgba(148,163,184,0.1)")
-                    st.plotly_chart(fig_cost, use_container_width=True, config={"displayModeBar": False})
+                    _rows_chart = [{"Rubrado": r["Rubrado"], "Presupuesto": _parse_pesos(r["Presupuesto $"]), "Ejecutado": _parse_pesos(r["Ejecutado $"])} for r in rows_costeo if _parse_pesos(r["Presupuesto $"]) > 0]
+                    if _rows_chart:
+                        df_chart = pd.DataFrame(_rows_chart)
+                        df_melt = df_chart.melt(id_vars="Rubrado", var_name="Tipo", value_name="Monto")
+                        fig_cost = px.bar(df_melt, x="Rubrado", y="Monto", color="Tipo", barmode="group",
+                            color_discrete_map={"Presupuesto":"#4F46E5","Ejecutado":"#059669"},
+                            text_auto=".3s")
+                        fig_cost.update_layout(margin=dict(t=10,b=60,l=0,r=0), paper_bgcolor="rgba(0,0,0,0)",
+                            plot_bgcolor="rgba(0,0,0,0)", legend=dict(orientation="h", y=-0.25, x=0.5, xanchor="center"),
+                            xaxis_title="", yaxis_title="UYU", xaxis_tickangle=-30)
+                        fig_cost.update_yaxes(showgrid=True, gridcolor="rgba(148,163,184,0.1)")
+                        st.plotly_chart(fig_cost, use_container_width=True, config={"displayModeBar": False})
+                    else:
+                        st.info("Sin datos de presupuesto para mostrar.")
 
             # ── SUBTAB 3: AVANCES ────────────────────────────────────
             with obra_tabs[2]:
