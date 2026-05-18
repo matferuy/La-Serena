@@ -324,11 +324,19 @@ def extraer_hyperlinks(spreadsheet_id, sheet_name):
     return links
 
 def get_drive_service():
-    creds = Credentials.from_service_account_info(
-        st.secrets["gcp_service_account"],
-        scopes=["https://www.googleapis.com/auth/drive"]
-    )
-    return build('drive', 'v3', credentials=creds)
+    if "google_oauth_refresh_token" in st.secrets:
+        from google.oauth2.credentials import Credentials as OAuthCredentials
+        from google.auth.transport.requests import Request
+        creds = OAuthCredentials(
+            token=None,
+            refresh_token=st.secrets["google_oauth_refresh_token"],
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=st.secrets["google_oauth_client_id"],
+            client_secret=st.secrets["google_oauth_client_secret"]
+        )
+        creds.refresh(Request())
+        return build('drive', 'v3', credentials=creds)
+    raise RuntimeError("Falta google_oauth_refresh_token en los secrets. Corré get_drive_token.py para generarlo.")
 
 def get_drive_folder_id():
     # Intenta top-level primero, luego busca en secciones anidadas
