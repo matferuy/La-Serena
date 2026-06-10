@@ -890,43 +890,56 @@ else:
                     fig_pie.update_layout(margin=dict(t=10, b=30, l=0, r=0), showlegend=True, legend=dict(orientation="h", y=-0.1, x=0.5, xanchor="center", font=dict(size=11)), paper_bgcolor="rgba(0,0,0,0)")
                     fig_pie.update_traces(textinfo='percent', textfont_size=12, hovertemplate='%{label}<br>U$S %{value:,.0f}<extra></extra>')
                     st.plotly_chart(fig_pie, use_container_width=True, config={'displayModeBar': False})
+                gastos_socio = df_dash.groupby("Pagado_por")["Monto_USD"].sum().to_dict()
+                transf_env, transf_rec = {}, {}
+                if not df_transfers.empty:
+                    df_tr = df_transfers.copy()
+                    df_tr["Monto_USD"] = df_tr.apply(
+                        lambda r: r["Monto_Original"] if str(r.get("Moneda","")).upper()=="USD"
+                                  else r["Monto_UYU"] / tasa_actual, axis=1)
+                    transf_env = df_tr.groupby("Origen")["Monto_USD"].sum().to_dict()
+                    transf_rec = df_tr.groupby("Destino")["Monto_USD"].sum().to_dict()
+                socios = sorted(set(list(gastos_socio) + list(transf_env) + list(transf_rec)))
+                colores_socio = ["#4F46E5", "#059669", "#7C3AED"]
+
                 with col_chart2:
-                    st.markdown('<div class="section-title">Aporte efectivo por socio</div>', unsafe_allow_html=True)
-                    gastos_socio = df_dash.groupby("Pagado_por")["Monto_USD"].sum().to_dict()
-                    transf_env, transf_rec = {}, {}
-                    if not df_transfers.empty:
-                        df_tr = df_transfers.copy()
-                        df_tr["Monto_USD"] = df_tr.apply(
-                            lambda r: r["Monto_Original"] if str(r.get("Moneda","")).upper()=="USD"
-                                      else r["Monto_UYU"] / tasa_actual, axis=1)
-                        transf_env = df_tr.groupby("Origen")["Monto_USD"].sum().to_dict()
-                        transf_rec = df_tr.groupby("Destino")["Monto_USD"].sum().to_dict()
-                    socios = sorted(set(list(gastos_socio) + list(transf_env) + list(transf_rec)))
-                    pasos = ["Gastos", "Transf. enviadas", "Transf. recibidas", "Aporte neto"]
-                    colores_socio = ["#4F46E5", "#059669", "#7C3AED"]
-                    fig_wf = go.Figure()
-                    for i, s in enumerate(socios):
-                        g = gastos_socio.get(s, 0.0)
-                        env = transf_env.get(s, 0.0)
-                        rec = transf_rec.get(s, 0.0)
-                        neto = g + env - rec
-                        fig_wf.add_trace(go.Waterfall(
-                            name=s, x=pasos,
-                            measure=["relative", "relative", "relative", "total"],
-                            y=[g, env, -rec, neto],
-                            text=[f"U$S {v:,.0f}" for v in [g, env, -rec, neto]],
-                            textposition="outside", textfont=dict(size=12),
-                            connector=dict(line=dict(color="rgba(148,163,184,0.3)")),
-                            increasing=dict(marker=dict(color=colores_socio[i % len(colores_socio)])),
-                            decreasing=dict(marker=dict(color="#EF4444")),
-                            totals=dict(marker=dict(color=colores_socio[i % len(colores_socio)])),
-                            hovertemplate='%{x}<br>U$S %{y:,.0f}<extra>' + s + '</extra>'
-                        ))
-                    fig_wf.update_layout(waterfallmode="group", margin=dict(t=10, b=0, l=0, r=0),
-                        legend=dict(orientation="h", y=-0.15, x=0.5, xanchor="center", font=dict(size=12)),
-                        xaxis_title="", yaxis_title="U$S", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
-                    fig_wf.update_yaxes(showgrid=True, gridcolor="rgba(148,163,184,0.1)")
-                    st.plotly_chart(fig_wf, use_container_width=True, config={'displayModeBar': False})
+                    st.markdown('<div class="section-title">Aporte neto por socio</div>', unsafe_allow_html=True)
+                    netos = [gastos_socio.get(s,0) + transf_env.get(s,0) - transf_rec.get(s,0) for s in socios]
+                    df_bar = pd.DataFrame({"Socio": socios, "Monto_USD": netos})
+                    df_bar["label"] = df_bar["Monto_USD"].apply(lambda v: f"U$S {v:,.0f}")
+                    fig_bar = px.bar(df_bar, x='Socio', y='Monto_USD', text='label', color='Socio', color_discrete_sequence=colores_socio)
+                    fig_bar.update_layout(margin=dict(t=10, b=0, l=0, r=0), showlegend=False, xaxis_title="", yaxis_title="U$S", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+                    fig_bar.update_traces(marker_line_width=0, textfont_size=14, hovertemplate='%{x}<br>U$S %{y:,.0f}<extra></extra>')
+                    fig_bar.update_yaxes(showgrid=True, gridcolor="rgba(148,163,184,0.1)")
+                    st.plotly_chart(fig_bar, use_container_width=True, config={'displayModeBar': False})
+
+                st.markdown("<hr class='divider'>", unsafe_allow_html=True)
+                st.markdown('<div class="section-title">Detalle del aporte por socio</div>', unsafe_allow_html=True)
+                cols_wf = st.columns(len(socios)) if socios else []
+                for i, s in enumerate(socios):
+                    g = gastos_socio.get(s, 0.0)
+                    env = transf_env.get(s, 0.0)
+                    rec = transf_rec.get(s, 0.0)
+                    neto = g + env - rec
+                    fig_wf = go.Figure(go.Waterfall(
+                        x=["Gastos", "Enviado", "Recibido", "Neto"],
+                        measure=["relative", "relative", "relative", "total"],
+                        y=[g, env, -rec, neto],
+                        text=[f"{v:,.0f}" for v in [g, env, -rec, neto]],
+                        textposition="outside", textfont=dict(size=13),
+                        connector=dict(line=dict(color="rgba(148,163,184,0.3)")),
+                        increasing=dict(marker=dict(color=colores_socio[i % len(colores_socio)])),
+                        decreasing=dict(marker=dict(color="#EF4444")),
+                        totals=dict(marker=dict(color="#0EA5E9")),
+                        hovertemplate='%{x}<br>U$S %{y:,.0f}<extra></extra>'
+                    ))
+                    fig_wf.update_layout(title=dict(text=s, x=0.5, font=dict(size=15)),
+                        margin=dict(t=40, b=0, l=0, r=0), showlegend=False,
+                        xaxis_title="", yaxis_title="U$S",
+                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+                    fig_wf.update_yaxes(showgrid=True, gridcolor="rgba(148,163,184,0.1)", rangemode="tozero")
+                    with cols_wf[i]:
+                        st.plotly_chart(fig_wf, use_container_width=True, config={'displayModeBar': False})
 
                 st.markdown("<hr class='divider'>", unsafe_allow_html=True)
                 st.markdown('<div class="section-title">Evolución del gasto por tipo</div>', unsafe_allow_html=True)
