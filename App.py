@@ -908,7 +908,7 @@ else:
                     netos = [gastos_socio.get(s,0) + transf_env.get(s,0) - transf_rec.get(s,0) for s in socios]
                     df_bar = pd.DataFrame({"Socio": socios, "Monto_USD": netos})
                     df_bar["label"] = df_bar["Monto_USD"].apply(lambda v: f"U$S {v:,.0f}")
-                    fig_bar = px.bar(df_bar, x='Socio', y='Monto_USD', text='label', color='Socio', color_discrete_sequence=colores_socio)
+                    fig_bar = px.bar(df_bar, x='Socio', y='Monto_USD', text='label', color='Socio', color_discrete_sequence=["#374151", "#374151"])
                     fig_bar.update_layout(margin=dict(t=10, b=0, l=0, r=0), showlegend=False, xaxis_title="", yaxis_title="U$S", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
                     fig_bar.update_traces(marker_line_width=0, textfont_size=14, hovertemplate='%{x}<br>U$S %{y:,.0f}<extra></extra>')
                     fig_bar.update_yaxes(showgrid=True, gridcolor="rgba(148,163,184,0.1)")
