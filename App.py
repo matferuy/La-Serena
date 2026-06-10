@@ -920,13 +920,16 @@ else:
                     fig_sub = make_subplots(rows=1, cols=len(socios),
                         subplot_titles=socios, shared_yaxes=True,
                         horizontal_spacing=0.12)
+                    _C_GASTOS = "#4F46E5"
+                    _C_ENV    = "#059669"
+                    _C_REC    = "#EF4444"
+                    _C_NETO   = "#374151"
                     for i, s in enumerate(socios):
                         col_idx = i + 1
                         g = gastos_socio.get(s, 0.0)
                         env = transf_env.get(s, 0.0)
                         rec = transf_rec.get(s, 0.0)
                         neto = g + env - rec
-                        color = colores_socio[i % len(colores_socio)]
                         fig_sub.add_trace(go.Waterfall(
                             x=["Gastos", "Enviado", "Recibido", "Neto"],
                             measure=["relative", "relative", "relative", "total"],
@@ -934,9 +937,10 @@ else:
                             text=[f"{v:,.0f}" for v in [g, env, -rec, neto]],
                             textposition="outside", textfont=dict(size=12),
                             connector=dict(line=dict(color="rgba(148,163,184,0.3)")),
-                            increasing=dict(marker=dict(color=color)),
-                            decreasing=dict(marker=dict(color="#EF4444")),
-                            totals=dict(marker=dict(color=color)),
+                            increasing=dict(marker=dict(color=_C_GASTOS)),
+                            decreasing=dict(marker=dict(color=_C_REC)),
+                            totals=dict(marker=dict(color=_C_NETO)),
+                            marker=dict(color=[_C_GASTOS, _C_ENV, _C_REC, _C_NETO]),
                             showlegend=False,
                             hovertemplate='%{x}<br>U$S %{y:,.0f}<extra></extra>'
                         ), row=1, col=col_idx)
