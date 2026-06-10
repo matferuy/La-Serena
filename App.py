@@ -930,25 +930,29 @@ else:
                         env = transf_env.get(s, 0.0)
                         rec = transf_rec.get(s, 0.0)
                         neto = g + env - rec
-                        fig_sub.add_trace(go.Waterfall(
-                            x=["Gastos", "Enviado", "Recibido", "Neto"],
-                            measure=["relative", "relative", "relative", "total"],
-                            y=[g, env, -rec, neto],
-                            text=[f"{v:,.0f}" for v in [g, env, -rec, neto]],
-                            textposition="outside", textfont=dict(size=12),
-                            connector=dict(line=dict(color="rgba(148,163,184,0.3)")),
-                            increasing=dict(marker=dict(color=_C_GASTOS)),
-                            decreasing=dict(marker=dict(color=_C_REC)),
-                            totals=dict(marker=dict(color=_C_NETO)),
-                            marker=dict(color=[_C_GASTOS, _C_ENV, _C_REC, _C_NETO]),
-                            showlegend=False,
+                        xs     = ["Gastos", "Enviado", "Recibido", "Neto"]
+                        bases  = [0, g, g + env - rec, 0]
+                        heights= [g, env, rec, neto]
+                        colors = [_C_GASTOS, _C_ENV, _C_REC, _C_NETO]
+                        texts  = [f"{v:,.0f}" for v in heights]
+                        fig_sub.add_trace(go.Bar(
+                            x=xs, y=bases,
+                            marker=dict(color='rgba(0,0,0,0)'),
+                            showlegend=False, hoverinfo='skip'
+                        ), row=1, col=col_idx)
+                        fig_sub.add_trace(go.Bar(
+                            x=xs, y=heights,
+                            marker=dict(color=colors),
+                            text=texts, textposition='outside',
+                            textfont=dict(size=12), showlegend=False,
                             hovertemplate='%{x}<br>U$S %{y:,.0f}<extra></extra>'
                         ), row=1, col=col_idx)
                         fig_sub.update_yaxes(showgrid=True, gridcolor="rgba(148,163,184,0.1)",
                             rangemode="tozero", row=1, col=col_idx)
-                    fig_sub.update_layout(margin=dict(t=40, b=10, l=0, r=0),
+                    fig_sub.update_layout(barmode='stack',
+                        margin=dict(t=40, b=10, l=0, r=0),
                         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                        height=350, font=dict(size=12))
+                        height=380, font=dict(size=12))
                     st.plotly_chart(fig_sub, use_container_width=True, config={'displayModeBar': False})
 
                 st.markdown("<hr class='divider'>", unsafe_allow_html=True)
