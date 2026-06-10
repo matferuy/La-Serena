@@ -917,28 +917,28 @@ else:
                 st.markdown('<div class="section-title">Detalle del aporte por socio</div>', unsafe_allow_html=True)
                 cols_wf = st.columns(len(socios)) if socios else []
                 for i, s in enumerate(socios):
-                    g = gastos_socio.get(s, 0.0)
-                    env = transf_env.get(s, 0.0)
-                    rec = transf_rec.get(s, 0.0)
-                    neto = g + env - rec
-                    fig_wf = go.Figure(go.Waterfall(
-                        x=["Gastos", "Enviado", "Recibido", "Neto"],
-                        measure=["relative", "relative", "relative", "total"],
-                        y=[g, env, -rec, neto],
-                        text=[f"{v:,.0f}" for v in [g, env, -rec, neto]],
-                        textposition="outside", textfont=dict(size=13),
-                        connector=dict(line=dict(color="rgba(148,163,184,0.3)")),
-                        increasing=dict(marker=dict(color=colores_socio[i % len(colores_socio)])),
-                        decreasing=dict(marker=dict(color="#EF4444")),
-                        totals=dict(marker=dict(color="#0EA5E9")),
-                        hovertemplate='%{x}<br>U$S %{y:,.0f}<extra></extra>'
-                    ))
-                    fig_wf.update_layout(title=dict(text=s, x=0.5, font=dict(size=15)),
-                        margin=dict(t=40, b=0, l=0, r=0), showlegend=False,
-                        xaxis_title="", yaxis_title="U$S",
-                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
-                    fig_wf.update_yaxes(showgrid=True, gridcolor="rgba(148,163,184,0.1)", rangemode="tozero")
                     with cols_wf[i]:
+                        g = gastos_socio.get(s, 0.0)
+                        env = transf_env.get(s, 0.0)
+                        rec = transf_rec.get(s, 0.0)
+                        neto = g + env - rec
+                        fig_wf = go.Figure(go.Waterfall(
+                            x=["Gastos", "Enviado", "Recibido", "Neto"],
+                            measure=["relative", "relative", "relative", "total"],
+                            y=[g, env, -rec, neto],
+                            text=[f"{v:,.0f}" for v in [g, env, -rec, neto]],
+                            textposition="outside", textfont=dict(size=13),
+                            connector=dict(line=dict(color="rgba(148,163,184,0.3)")),
+                            increasing=dict(marker=dict(color=colores_socio[i % len(colores_socio)])),
+                            decreasing=dict(marker=dict(color="#EF4444")),
+                            totals=dict(marker=dict(color="#0EA5E9")),
+                            hovertemplate='%{x}<br>U$S %{y:,.0f}<extra></extra>'
+                        ))
+                        fig_wf.update_layout(title=dict(text=s, x=0.5, font=dict(size=15)),
+                            margin=dict(t=40, b=0, l=0, r=0), showlegend=False,
+                            xaxis_title="", yaxis_title="U$S",
+                            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+                        fig_wf.update_yaxes(showgrid=True, gridcolor="rgba(148,163,184,0.1)", rangemode="tozero")
                         st.plotly_chart(fig_wf, use_container_width=True, config={'displayModeBar': False})
 
                 st.markdown("<hr class='divider'>", unsafe_allow_html=True)
