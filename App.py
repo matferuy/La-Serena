@@ -967,7 +967,7 @@ else:
                 gastos_evolucion = gastos_evolucion.sort_values("Fecha")
                 gastos_evolucion["Gasto_Acumulado"] = gastos_evolucion.groupby("Categoria")["Monto_USD"].cumsum()
 
-                fig_area = px.area(gastos_evolucion, x='Fecha', y='Gasto_Acumulado', color='Categoria', color_discrete_sequence=["#4F46E5","#7C3AED","#059669","#0EA5E9","#F59E0B"])
+                fig_area = px.area(gastos_evolucion, x='Fecha', y='Gasto_Acumulado', color='Categoria', color_discrete_sequence=["#4F46E5","#EF4444","#10B981","#F59E0B","#EC4899","#06B6D4","#8B5CF6","#F97316","#84CC16","#14B8A6"])
                 fig_area.update_layout(margin=dict(t=10, b=10, l=0, r=0), xaxis_title="", yaxis_title="Acumulado (U$S)", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", legend=dict(orientation="h", yanchor="bottom", y=-0.5, xanchor="center", x=0.5, title_text=""))
                 fig_area.update_xaxes(tickformat="%d/%m/%Y", hoverformat="%d/%m/%Y")
                 fig_area.update_traces(hovertemplate='%{x|%d/%m/%Y}<br>U$S %{y:,.0f}<extra></extra>')
