@@ -371,6 +371,34 @@ def upload_comprobante(file_bytes, filename, mimetype):
     ).execute()
     return archivo['webViewLink']
 
+# --- COMPROBANTES MÚLTIPLES ---
+ADJUNTO_SEP = " ||| "
+
+def parse_adjuntos(val):
+    """Devuelve la lista de URLs/archivos guardados en el campo Archivo_Adjunto."""
+    s = str(val or "").strip()
+    if not s or s == "Sin adjunto":
+        return []
+    return [u.strip() for u in s.split(ADJUNTO_SEP) if u.strip() and u.strip() != "Sin adjunto"]
+
+def subir_comprobantes(archivos, prefijo, fecha=""):
+    """Sube una lista de archivos. Devuelve (str_urls_unidas, lista_errores)."""
+    urls, errores = [], []
+    for archivo in archivos or []:
+        try:
+            file_bytes = bytes(archivo.getbuffer())
+            base = f"{prefijo}_{fecha}_{archivo.name}" if fecha else f"{prefijo}_{archivo.name}"
+            if USE_GSHEETS:
+                urls.append(upload_comprobante(file_bytes, base, archivo.type))
+            else:
+                ruta = os.path.join(DIR_COMPROBANTES, base)
+                with open(ruta, "wb") as f: f.write(file_bytes)
+                urls.append(base)
+        except Exception as e:
+            errores.append(str(e))
+    return ADJUNTO_SEP.join(urls), errores
+
+
 # --- FUNCIÓN: OBTENER TIPO DE CAMBIO AUTOMÁTICO ---
 @st.cache_data(ttl=3600)
 def obtener_tasa_usd_uyu():
@@ -648,7 +676,7 @@ else:
             et_labels, et_ids = build_etapa_options(df_etapas)
             et_idx = st.selectbox("Etapa del proyecto (opcional)", et_labels)
             gasto_etapa_id = et_ids[et_labels.index(et_idx)]
-            archivo_adjunto = st.file_uploader("Adjuntar Factura/Boleta", type=["pdf", "png", "jpg", "jpeg"])
+            archivos_adjuntos = st.file_uploader("Adjuntar Facturas/Boletas", type=["pdf", "png", "jpg", "jpeg"], accept_multiple_files=True)
 
             st.markdown("<br>", unsafe_allow_html=True)
             col_save, col_cancel = st.columns(2)
@@ -656,16 +684,10 @@ else:
                 if monto and concepto and categoria and categoria.strip():
                     monto_uyu = monto * tasa_cambio
                     nombre_archivo = "Sin adjunto"
-                    if archivo_adjunto:
-                        file_bytes = bytes(archivo_adjunto.getbuffer())
-                        nombre_archivo = f"GASTO_{fecha}_{archivo_adjunto.name}"
-                        if USE_GSHEETS:
-                            try:
-                                nombre_archivo = upload_comprobante(file_bytes, nombre_archivo, archivo_adjunto.type)
-                            except Exception as e:
-                                st.warning(f"No se pudo subir a Drive: {e}")
-                        else:
-                            with open(os.path.join(DIR_COMPROBANTES, nombre_archivo), "wb") as f: f.write(file_bytes)
+                    if archivos_adjuntos:
+                        urls, errores = subir_comprobantes(archivos_adjuntos, "GASTO", str(fecha))
+                        if urls: nombre_archivo = urls
+                        for e in errores: st.warning(f"No se pudo subir un comprobante a Drive: {e}")
 
                     nuevo_dato = pd.DataFrame([{"ID": uuid.uuid4().hex, "Fecha": str(fecha), "Concepto": concepto, "Moneda": moneda, "Monto_Original": monto, "Tasa_Cambio": tasa_cambio, "Monto_UYU": monto_uyu, "Pagado_por": pagado_por, "Categoria": categoria, "Etapa_ID": gasto_etapa_id, "Archivo_Adjunto": nombre_archivo, "Modificado_por_Admin": False}])
                     save_data(pd.concat([df_gastos, nuevo_dato], ignore_index=True), DATA_FILE)
@@ -699,12 +721,19 @@ else:
             if moneda_transf == "USD":
                 tasa_cambio_transf = st.number_input("Tasa de cambio", min_value=1.0, value=float(obtener_tasa_usd_uyu()), format="%.2f")
 
+            archivos_transf = st.file_uploader("Adjuntar comprobantes", type=["pdf", "png", "jpg", "jpeg"], accept_multiple_files=True)
+
             st.markdown("<br>", unsafe_allow_html=True)
             col_save, col_cancel = st.columns(2)
             if col_save.button("Registrar", type="primary", use_container_width=True):
                 if monto_transf:
                     monto_uyu_transf = monto_transf * tasa_cambio_transf
-                    nuevo_dato_transf = pd.DataFrame([{"ID": uuid.uuid4().hex, "Fecha": fecha_transf, "Origen": origen, "Destino": destino, "Moneda": moneda_transf, "Monto_Original": monto_transf, "Tasa_Cambio": tasa_cambio_transf, "Monto_UYU": monto_uyu_transf, "Archivo_Adjunto": "Sin adjunto", "Modificado_por_Admin": False}])
+                    adjunto_transf_nuevo = "Sin adjunto"
+                    if archivos_transf:
+                        urls, errores = subir_comprobantes(archivos_transf, "TRANSF", str(fecha_transf))
+                        if urls: adjunto_transf_nuevo = urls
+                        for e in errores: st.warning(f"No se pudo subir un comprobante a Drive: {e}")
+                    nuevo_dato_transf = pd.DataFrame([{"ID": uuid.uuid4().hex, "Fecha": fecha_transf, "Origen": origen, "Destino": destino, "Moneda": moneda_transf, "Monto_Original": monto_transf, "Tasa_Cambio": tasa_cambio_transf, "Monto_UYU": monto_uyu_transf, "Archivo_Adjunto": adjunto_transf_nuevo, "Modificado_por_Admin": False}])
                     save_data(pd.concat([df_transfers, nuevo_dato_transf], ignore_index=True), TRANSFERS_FILE)
                     st.session_state.modo_registro = None
                     st.rerun()
@@ -759,10 +788,11 @@ else:
             edit_etapa_label = st.selectbox("Etapa del proyecto", et_labels_e, index=et_idx_e)
             edit_etapa_id = et_ids_e[et_labels_e.index(edit_etapa_label)]
 
-            adjunto_actual = str(fila_actual.get("Archivo_Adjunto", "Sin adjunto"))
-            if adjunto_actual.startswith("https://"):
-                st.markdown(f"📎 Comprobante actual: [ver archivo]({adjunto_actual})")
-            edit_archivo = st.file_uploader("Reemplazar comprobante", type=["pdf", "png", "jpg", "jpeg"])
+            adjuntos_actuales = parse_adjuntos(fila_actual.get("Archivo_Adjunto", ""))
+            if adjuntos_actuales:
+                links = " · ".join(f"[ver {i+1}]({u})" for i, u in enumerate(adjuntos_actuales))
+                st.markdown(f"📎 Comprobantes actuales: {links}")
+            edit_archivos = st.file_uploader("Agregar comprobantes", type=["pdf", "png", "jpg", "jpeg"], accept_multiple_files=True)
 
             st.markdown("<br>", unsafe_allow_html=True)
             col_save, col_del, col_cancel = st.columns(3)
@@ -778,17 +808,12 @@ else:
                 df_gastos.at[idx_general, "Categoria"] = edit_categoria
                 df_gastos.at[idx_general, "Pagado_por"] = edit_pagado_por
                 df_gastos.at[idx_general, "Etapa_ID"] = edit_etapa_id
-                if edit_archivo:
-                    file_bytes = bytes(edit_archivo.getbuffer())
-                    nombre_archivo = f"GASTO_{edit_fecha}_{edit_archivo.name}"
-                    if USE_GSHEETS:
-                        try:
-                            nombre_archivo = upload_comprobante(file_bytes, nombre_archivo, edit_archivo.type)
-                        except Exception as e:
-                            st.warning(f"No se pudo subir a Drive: {e}")
-                    else:
-                        with open(os.path.join(DIR_COMPROBANTES, nombre_archivo), "wb") as f: f.write(file_bytes)
-                    df_gastos.at[idx_general, "Archivo_Adjunto"] = nombre_archivo
+                if edit_archivos:
+                    urls, errores = subir_comprobantes(edit_archivos, "GASTO", str(edit_fecha))
+                    for e in errores: st.warning(f"No se pudo subir un comprobante a Drive: {e}")
+                    nuevos = parse_adjuntos(urls)
+                    todos = adjuntos_actuales + nuevos
+                    if todos: df_gastos.at[idx_general, "Archivo_Adjunto"] = ADJUNTO_SEP.join(todos)
                 save_data(df_gastos, DATA_FILE)
                 st.session_state.gasto_a_editar = None
                 st.rerun()
@@ -812,25 +837,22 @@ else:
         st.markdown('<div class="section-title">Gestionar Transferencia</div>', unsafe_allow_html=True)
         st.warning("Para modificar montos u origen/destino, eliminá este registro y creá uno nuevo.")
 
-        adjunto_transf = str(fila_transf.get("Archivo_Adjunto", "Sin adjunto"))
-        if adjunto_transf.startswith("https://"):
-            st.markdown(f"📎 Comprobante actual: [ver archivo]({adjunto_transf})")
-        edit_archivo_transf = st.file_uploader("Adjuntar comprobante", type=["pdf", "png", "jpg", "jpeg"])
+        adjuntos_transf = parse_adjuntos(fila_transf.get("Archivo_Adjunto", ""))
+        if adjuntos_transf:
+            links = " · ".join(f"[ver {i+1}]({u})" for i, u in enumerate(adjuntos_transf))
+            st.markdown(f"📎 Comprobantes actuales: {links}")
+        edit_archivos_transf = st.file_uploader("Agregar comprobantes", type=["pdf", "png", "jpg", "jpeg"], accept_multiple_files=True)
 
-        if edit_archivo_transf:
-            if st.button("Guardar comprobante", type="primary", use_container_width=True):
-                file_bytes = bytes(edit_archivo_transf.getbuffer())
-                nombre_archivo = f"TRANSF_{edit_archivo_transf.name}"
-                if USE_GSHEETS:
-                    try:
-                        nombre_archivo = upload_comprobante(file_bytes, nombre_archivo, edit_archivo_transf.type)
-                    except Exception as e:
-                        st.warning(f"No se pudo subir a Drive: {e}")
-                else:
-                    with open(os.path.join(DIR_COMPROBANTES, nombre_archivo), "wb") as f: f.write(file_bytes)
-                idx_t = df_transfers[df_transfers["ID"] == id_transf].index[0]
-                df_transfers.at[idx_t, "Archivo_Adjunto"] = nombre_archivo
-                save_data(df_transfers, TRANSFERS_FILE)
+        if edit_archivos_transf:
+            if st.button("Guardar comprobantes", type="primary", use_container_width=True):
+                urls, errores = subir_comprobantes(edit_archivos_transf, "TRANSF", str(fila_transf.get("Fecha","")))
+                for e in errores: st.warning(f"No se pudo subir un comprobante a Drive: {e}")
+                nuevos = parse_adjuntos(urls)
+                todos = adjuntos_transf + nuevos
+                if todos:
+                    idx_t = df_transfers[df_transfers["ID"] == id_transf].index[0]
+                    df_transfers.at[idx_t, "Archivo_Adjunto"] = ADJUNTO_SEP.join(todos)
+                    save_data(df_transfers, TRANSFERS_FILE)
                 st.session_state.transfer_a_editar = None
                 st.rerun()
 
@@ -999,15 +1021,15 @@ else:
                     for _, f in df_gastos.sort_values("Fecha", ascending=False).iterrows():
                         cat = str(f.get("Categoria","Otros"))
                         badge_cls, badge_lbl = CAT_BADGE.get(cat, ("badge-otros", cat))
-                        adjunto = str(f.get("Archivo_Adjunto",""))
-                        clip = "📎 " if adjunto.startswith("https://") else ""
+                        adjuntos = parse_adjuntos(f.get("Archivo_Adjunto",""))
+                        clip = "📎 " if adjuntos else ""
                         title_html = (
                             f"<span style='font-weight:700;font-size:0.95rem;'>{f['Concepto']}</span>"
                             f"&nbsp;&nbsp;<span class='badge {badge_cls}'>{badge_lbl}</span>"
                         )
                         expander_label = f"{f['Fecha'].strftime('%d/%m/%y')}  ·  {f['Concepto']}  ·  ${f['Monto_Original']:,.0f} {f['Moneda']}"
                         with st.expander(expander_label):
-                            clip_span = '<span style="font-size:0.8rem;opacity:0.55;">📎 Comprobante</span>' if adjunto.startswith('https://') else ''
+                            clip_span = f'<span style="font-size:0.8rem;opacity:0.55;">📎 {len(adjuntos)} comprobante(s)</span>' if adjuntos else ''
                             st.markdown(
                                 f"<div style='display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:8px;'>"
                                 f"<span class='badge {badge_cls}'>{badge_lbl}</span>"
@@ -1022,8 +1044,8 @@ else:
                                 st.metric("Monto", f"${f['Monto_Original']:,.2f} {f['Moneda']}")
                             with col_b:
                                 st.metric("En UYU", f"${f['Monto_UYU']:,.0f}")
-                            if adjunto.startswith("https://"):
-                                st.markdown(f"[📎 Ver comprobante]({adjunto})")
+                            if adjuntos:
+                                st.markdown(" · ".join(f"[📎 Ver comprobante {i+1}]({u})" for i, u in enumerate(adjuntos)))
                             if st.button("✏️ Editar / Eliminar", key=f"e_{f['ID']}", use_container_width=True):
                                 st.session_state.tab_activa = 1  # volver a Historial
                                 st.session_state.gasto_a_editar = f["ID"]
@@ -1043,6 +1065,9 @@ else:
                                 st.metric("Enviado", f"${f['Monto_Original']:,.2f} {f['Moneda']}")
                             with col_b:
                                 st.metric("En UYU", f"${f['Monto_UYU']:,.0f}")
+                            adjuntos_t = parse_adjuntos(f.get("Archivo_Adjunto",""))
+                            if adjuntos_t:
+                                st.markdown(" · ".join(f"[📎 Ver comprobante {i+1}]({u})" for i, u in enumerate(adjuntos_t)))
                             if st.button("🗑️ Gestionar", key=f"t_{f['ID']}", use_container_width=True):
                                 st.session_state.tab_activa = 1  # volver a Historial
                                 st.session_state.transfer_a_editar = f["ID"]
