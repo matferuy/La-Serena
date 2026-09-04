@@ -11,6 +11,7 @@ import pandas as pd
 import os
 import io
 import datetime
+import textwrap
 import requests
 import gspread
 from google.oauth2.service_account import Credentials
@@ -251,8 +252,10 @@ PALETAS = {
 def inject_css(paleta="obra"):
     """Inyecta los estilos base con la paleta de colores del aplicativo."""
     a, b, dark, shadow = PALETAS.get(paleta, PALETAS["obra"])
-    vars_css = f"<style>:root{{--grad-a:{a};--grad-b:{b};--grad-dark:{dark};--grad-shadow:{shadow};}}</style>"
-    st.markdown(vars_css + CSS_BASE, unsafe_allow_html=True)
+    vars_css = f":root{{--grad-a:{a};--grad-b:{b};--grad-dark:{dark};--grad-shadow:{shadow};}}"
+    base = textwrap.dedent(CSS_BASE).strip()
+    base = base.replace("<style>", "<style>\n" + vars_css, 1)
+    st.markdown(base, unsafe_allow_html=True)
 
 def gradiente(paleta="obra"):
     a, b, _, _ = PALETAS.get(paleta, PALETAS["obra"])
