@@ -5,226 +5,31 @@ import datetime
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import requests
 import uuid
 import io
-import gspread
-from google.oauth2.service_account import Credentials
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload
+from common import (
+    inject_css, USE_GSHEETS, USERS_FILE, DIR_COMPROBANTES, DIR_BACKUPS,
+    load_sheet_as_df, save_df_to_sheet, extraer_hyperlinks, get_gspread_client,
+    upload_comprobante, ADJUNTO_SEP, parse_adjuntos, subir_comprobantes,
+    obtener_tasa_usd_uyu, load_users, render_login, render_header, restaurar_tab,
+    has_secret, get_secret,
+)
 
 # --- CONFIGURACIÓN INICIAL ---
 st.set_page_config(page_title="Casa La Serena", page_icon="🏡", layout="wide", initial_sidebar_state="collapsed")
 
 # --- DISEÑO ---
-st.markdown("""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
-
-    html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-    #MainMenu { visibility: hidden; }
-    footer { visibility: hidden; }
-    header { visibility: hidden; }
-    .block-container { padding-top: 0.5rem; max-width: 900px; }
-
-    /* ── Botones ── */
-    .stButton > button {
-        border-radius: 14px; font-weight: 700; font-size: 0.92rem;
-        height: 2.85rem; transition: all 0.2s cubic-bezier(.4,0,.2,1);
-        letter-spacing: 0.01em;
-    }
-    .stButton > button[kind="primary"] {
-        background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
-        border: none; color: white;
-        box-shadow: 0 4px 16px rgba(79,70,229,0.4);
-    }
-    .stButton > button[kind="primary"]:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 24px rgba(79,70,229,0.55);
-    }
-    .stButton > button:not([kind="primary"]) {
-        border: 1.5px solid rgba(148,163,184,0.3);
-    }
-    .stButton > button:not([kind="primary"]):hover {
-        transform: translateY(-1px);
-        border-color: rgba(79,70,229,0.4);
-    }
-
-    /* ── Inputs ── */
-    .stTextInput > div > div > input,
-    .stNumberInput > div > div > input,
-    .stSelectbox > div > div {
-        border-radius: 12px !important;
-        border: 1.5px solid rgba(148,163,184,0.25) !important;
-        transition: border-color 0.15s ease !important;
-    }
-    .stTextInput > div > div > input:focus,
-    .stNumberInput > div > div > input:focus {
-        border-color: #4F46E5 !important;
-        box-shadow: 0 0 0 3px rgba(79,70,229,0.12) !important;
-    }
-
-    /* ── Expanders ── */
-    div[data-testid="stExpander"] {
-        background: var(--secondary-background-color);
-        border-radius: 18px;
-        border: 1.5px solid rgba(148,163,184,0.13);
-        margin-bottom: 10px;
-        overflow: hidden;
-        transition: box-shadow 0.2s ease;
-    }
-    div[data-testid="stExpander"]:hover {
-        box-shadow: 0 4px 16px rgba(0,0,0,0.07);
-    }
-
-    /* ── Tabs ── */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 2px; background: var(--secondary-background-color);
-        border-radius: 16px; padding: 5px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        border-radius: 12px; font-weight: 700; font-size: 0.84rem;
-        padding: 0.45rem 1rem;
-    }
-    .stTabs [aria-selected="true"] {
-        background: var(--background-color) !important;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.09);
-    }
-
-    /* ── KPI Cards ── */
-    .kpi-card {
-        padding: 24px 26px 20px 26px;
-        border-radius: 22px; margin-bottom: 14px;
-        position: relative; overflow: hidden;
-    }
-    .kpi-card-primary {
-        background: linear-gradient(135deg, #2E1065 0%, #4F46E5 60%, #7C3AED 100%);
-        color: white; box-shadow: 0 10px 36px rgba(79,70,229,0.32);
-    }
-    .kpi-card-success {
-        background: linear-gradient(135deg, #064E3B 0%, #059669 70%, #10B981 100%);
-        color: white; box-shadow: 0 10px 36px rgba(5,150,105,0.3);
-    }
-    .kpi-card-amber {
-        background: linear-gradient(135deg, #78350F 0%, #D97706 70%, #F59E0B 100%);
-        color: white; box-shadow: 0 10px 36px rgba(217,119,6,0.3);
-    }
-    .kpi-card-neutral {
-        background: var(--background-color); color: var(--text-color);
-        border: 1.5px solid rgba(148,163,184,0.2);
-        box-shadow: 0 2px 12px rgba(0,0,0,0.05);
-    }
-    .kpi-icon {
-        font-size: 2rem; margin-bottom: 12px; display: block; opacity: 0.9;
-    }
-    .kpi-label {
-        font-size: 0.8rem; font-weight: 800; text-transform: uppercase;
-        letter-spacing: 1.4px; opacity: 0.6; margin-bottom: 8px;
-    }
-    .kpi-value {
-        font-size: 2.6rem; font-weight: 900;
-        line-height: 1.05; letter-spacing: -0.04em; margin: 0;
-    }
-    .kpi-sub {
-        font-size: 0.9rem; opacity: 0.55; font-weight: 500; margin-top: 6px;
-    }
-
-    /* ── Section Headers ── */
-    .section-title {
-        font-size: 1.05rem; font-weight: 800; letter-spacing: -0.02em;
-        margin: 20px 0 14px 0; display: flex; align-items: center; gap: 8px;
-    }
-    .section-title::before {
-        content: ''; display: block; width: 4px; height: 1.2em;
-        background: linear-gradient(180deg, #4F46E5, #7C3AED);
-        border-radius: 4px; flex-shrink: 0;
-    }
-
-    /* ── Badges de categoría ── */
-    .badge {
-        display: inline-block; padding: 2px 10px; border-radius: 20px;
-        font-size: 0.72rem; font-weight: 700; letter-spacing: 0.02em;
-    }
-    .badge-mat  { background: rgba(79,70,229,0.12);  color: #4F46E5; }
-    .badge-mdo  { background: rgba(5,150,105,0.12);  color: #059669; }
-    .badge-tram { background: rgba(245,158,11,0.12); color: #D97706; }
-    .badge-ter  { background: rgba(239,68,68,0.12);  color: #DC2626; }
-    .badge-otros{ background: rgba(100,116,139,0.12);color: #475569; }
-
-    /* ── Acción rápida cards ── */
-    .action-card {
-        background: var(--secondary-background-color);
-        border: 1.5px solid rgba(148,163,184,0.15);
-        border-radius: 20px; padding: 20px 18px;
-        text-align: center; cursor: pointer;
-        transition: all 0.2s ease;
-    }
-    .action-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.08); }
-    .action-icon { font-size: 2rem; margin-bottom: 8px; }
-
-    /* ── Progress bar ── */
-    .balance-bar-wrap { border-radius: 100px; overflow: hidden; height: 12px; background: rgba(148,163,184,0.15); }
-    .balance-bar-fill { height: 100%; border-radius: 100px; transition: width 0.6s cubic-bezier(.4,0,.2,1); }
-
-    /* ── Etapa cards ── */
-    .etapa-card {
-        background: var(--background-color);
-        border: 1.5px solid rgba(148,163,184,0.18);
-        border-radius: 20px; padding: 20px 22px 16px 22px;
-        margin-bottom: 14px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.04);
-    }
-    .etapa-nombre { font-size: 1.05rem; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 4px; }
-    .etapa-desc { font-size: 0.82rem; opacity: 0.5; margin-bottom: 14px; }
-    .etapa-progress-wrap { border-radius: 100px; overflow:hidden; height: 8px; background: rgba(148,163,184,0.15); margin-bottom: 6px; }
-    .etapa-progress-fill { height: 100%; border-radius: 100px; }
-    .estado-pendiente { background: rgba(100,116,139,0.12); color: #475569; }
-    .estado-curso     { background: rgba(79,70,229,0.12);   color: #4F46E5; }
-    .estado-completado{ background: rgba(5,150,105,0.12);   color: #059669; }
-
-    /* ── Avance cards ── */
-    .avance-card {
-        background: var(--secondary-background-color);
-        border-radius: 18px; padding: 16px 18px;
-        margin-bottom: 10px; border: 1.5px solid rgba(148,163,184,0.13);
-    }
-    .avance-fecha { font-size: 0.72rem; font-weight:700; opacity:0.4; text-transform:uppercase; letter-spacing:0.8px; }
-    .avance-titulo { font-size: 0.95rem; font-weight: 800; margin: 4px 0 6px 0; }
-    .avance-detalle { font-size: 0.83rem; opacity: 0.65; line-height:1.5; }
-
-    /* ── Divider ── */
-    .divider { border: none; border-top: 1.5px solid rgba(148,163,184,0.12); margin: 20px 0; }
-
-    /* ── Login card ── */
-    .login-hero {
-        text-align: center; padding: 56px 0 32px 0;
-    }
-    .login-logo {
-        width: 80px; height: 80px; border-radius: 24px; display: inline-flex;
-        align-items: center; justify-content: center;
-        background: linear-gradient(135deg, #4F46E5, #7C3AED);
-        font-size: 2.2rem; margin-bottom: 20px;
-        box-shadow: 0 12px 40px rgba(79,70,229,0.4);
-    }
-    </style>
-""", unsafe_allow_html=True)
+inject_css("obra")
 
 # --- CONFIGURACIÓN DE ARCHIVOS Y CARPETAS ---
 DATA_FILE = "contabilidad_casa.csv"
-USERS_FILE = "usuarios.csv"
 TRANSFERS_FILE = "transferencias.csv"
 ETAPAS_FILE = "etapas.csv"
 AVANCES_FILE = "avances.csv"
 PLANOS_FILE = "planos.csv"
-DIR_COMPROBANTES = "comprobantes"
-DIR_BACKUPS = "backups"
 
-for d in [DIR_COMPROBANTES, DIR_BACKUPS]:
-    try: os.makedirs(d, exist_ok=True)
-    except: pass
 
 # --- GOOGLE SHEETS ---
-USE_GSHEETS = "gcp_service_account" in st.secrets and "spreadsheet_id" in st.secrets
 
 SHEET_NAMES = {
     DATA_FILE: "Gastos", TRANSFERS_FILE: "Transferencias", USERS_FILE: "Usuarios",
@@ -232,7 +37,6 @@ SHEET_NAMES = {
 }
 GASTOS_COLS = ["ID", "Fecha", "Concepto", "Moneda", "Monto_Original", "Tasa_Cambio", "Monto_UYU", "Pagado_por", "Categoria", "Etapa_ID", "Archivo_Adjunto", "Modificado_por_Admin"]
 TRANSFERS_COLS = ["ID", "Fecha", "Origen", "Destino", "Moneda", "Monto_Original", "Tasa_Cambio", "Monto_UYU", "Archivo_Adjunto", "Modificado_por_Admin"]
-USERS_COLS = ["Usuario", "Clave"]
 ETAPAS_COLS = ["ID", "Nombre", "Descripcion", "Estado", "Fecha_Inicio", "Fecha_Fin_Est", "Progreso_Pct", "Plano_URL", "Presupuesto_UYU", "Parent_ID"]
 AVANCES_COLS = ["ID", "Fecha", "Etapa", "Titulo", "Detalle", "Foto_URL", "Tags", "Registrado_por"]
 PLANOS_COLS = ["ID", "Nombre", "Descripcion", "Version", "Fecha", "URL", "Tipo"]
@@ -258,170 +62,7 @@ ETAPAS_SEED = [
     {"ID":"et_seguimiento","Nombre":"Seguimiento de Obra",     "Descripcion":"Seguimiento profesional de la obra",          "Estado":"Pendiente", "Presupuesto_UYU":2500,  "Parent_ID":"et_admin"},
 ]
 
-@st.cache_resource
-def get_gspread_client():
-    creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
-    return gspread.authorize(creds)
-
-@st.cache_resource
-def get_spreadsheet():
-    return get_gspread_client().open_by_key(st.secrets["spreadsheet_id"])
-
-def _get_or_create_ws(sheet_name, columns):
-    spreadsheet = get_spreadsheet()
-    try:
-        return spreadsheet.worksheet(sheet_name)
-    except gspread.WorksheetNotFound:
-        ws = spreadsheet.add_worksheet(sheet_name, rows=1000, cols=len(columns))
-        ws.update(values=[columns], range_name='A1')
-        return ws
-
-@st.cache_data(ttl=300)
-def load_sheet_as_df(sheet_name, _columns):
-    ws = _get_or_create_ws(sheet_name, _columns)
-    records = ws.get_all_records()
-    return pd.DataFrame(records) if records else pd.DataFrame(columns=_columns)
-
-def save_df_to_sheet(df, sheet_name):
-    ws = _get_or_create_ws(sheet_name, df.columns.tolist())
-    ws.clear()
-    ws.update(values=[df.columns.tolist()] + df.astype(str).values.tolist(), range_name='A1')
-
-# --- GOOGLE DRIVE ---
-DRIVE_FOLDER_NAME = "La Serena - Comprobantes"
-
-@st.cache_resource
-def get_sheets_service():
-    creds = Credentials.from_service_account_info(
-        st.secrets["gcp_service_account"],
-        scopes=["https://www.googleapis.com/auth/spreadsheets"]
-    )
-    return build('sheets', 'v4', credentials=creds)
-
-def extraer_hyperlinks(spreadsheet_id, sheet_name):
-    """Devuelve dict {fila_idx: url} con los hyperlinks de todas las celdas."""
-    service = get_sheets_service()
-    result = service.spreadsheets().get(
-        spreadsheetId=spreadsheet_id,
-        ranges=[f"'{sheet_name}'"],
-        includeGridData=True
-    ).execute()
-    links = {}
-    try:
-        rows = result['sheets'][0]['data'][0]['rowData']
-        for r_idx, row in enumerate(rows):
-            row_links = {}
-            for c_idx, cell in enumerate(row.get('values', [])):
-                url = cell.get('hyperlink', '')
-                if not url:
-                    for run in cell.get('textFormatRuns', []):
-                        url = run.get('format', {}).get('link', {}).get('uri', '')
-                        if url: break
-                if url:
-                    row_links[c_idx] = url
-            if row_links:
-                links[r_idx] = row_links
-    except (KeyError, IndexError):
-        pass
-    return links
-
-def get_drive_service():
-    if "google_oauth_refresh_token" in st.secrets:
-        from google.oauth2.credentials import Credentials as OAuthCredentials
-        from google.auth.transport.requests import Request
-        creds = OAuthCredentials(
-            token=None,
-            refresh_token=st.secrets["google_oauth_refresh_token"],
-            token_uri="https://oauth2.googleapis.com/token",
-            client_id=st.secrets["google_oauth_client_id"],
-            client_secret=st.secrets["google_oauth_client_secret"]
-        )
-        creds.refresh(Request())
-        return build('drive', 'v3', credentials=creds)
-    raise RuntimeError("Falta google_oauth_refresh_token en los secrets. Corré get_drive_token.py para generarlo.")
-
-def get_drive_folder_id():
-    # Intenta top-level primero, luego busca en secciones anidadas
-    if "drive_folder_id" in st.secrets:
-        return str(st.secrets["drive_folder_id"]).strip()
-    # Busca en secciones anidadas (por si el usuario puso la key bajo [gcp_service_account] u otra sección)
-    for section_key in st.secrets:
-        try:
-            section = st.secrets[section_key]
-            if hasattr(section, '__getitem__') and "drive_folder_id" in section:
-                return str(section["drive_folder_id"]).strip()
-        except Exception:
-            pass
-    # Armar mensaje útil con las keys disponibles
-    available = list(st.secrets.keys())
-    raise ValueError(f"No se encontró 'drive_folder_id' en los Secrets. Keys disponibles: {available}. Asegurate de que esté al nivel raíz del TOML, no dentro de una sección.")
-
-def upload_comprobante(file_bytes, filename, mimetype):
-    service = get_drive_service()
-    folder_id = get_drive_folder_id()
-    media = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype=mimetype)
-    archivo = service.files().create(
-        body={'name': filename, 'parents': [folder_id]},
-        media_body=media, fields='id, webViewLink',
-        supportsAllDrives=True
-    ).execute()
-    service.permissions().create(
-        fileId=archivo['id'], body={'type': 'anyone', 'role': 'reader'},
-        supportsAllDrives=True
-    ).execute()
-    return archivo['webViewLink']
-
-# --- COMPROBANTES MÚLTIPLES ---
-ADJUNTO_SEP = " ||| "
-
-def parse_adjuntos(val):
-    """Devuelve la lista de URLs/archivos guardados en el campo Archivo_Adjunto."""
-    s = str(val or "").strip()
-    if not s or s == "Sin adjunto":
-        return []
-    return [u.strip() for u in s.split(ADJUNTO_SEP) if u.strip() and u.strip() != "Sin adjunto"]
-
-def subir_comprobantes(archivos, prefijo, fecha=""):
-    """Sube una lista de archivos. Devuelve (str_urls_unidas, lista_errores)."""
-    urls, errores = [], []
-    for archivo in archivos or []:
-        try:
-            file_bytes = bytes(archivo.getbuffer())
-            base = f"{prefijo}_{fecha}_{archivo.name}" if fecha else f"{prefijo}_{archivo.name}"
-            if USE_GSHEETS:
-                urls.append(upload_comprobante(file_bytes, base, archivo.type))
-            else:
-                ruta = os.path.join(DIR_COMPROBANTES, base)
-                with open(ruta, "wb") as f: f.write(file_bytes)
-                urls.append(base)
-        except Exception as e:
-            errores.append(str(e))
-    return ADJUNTO_SEP.join(urls), errores
-
-
-# --- FUNCIÓN: OBTENER TIPO DE CAMBIO AUTOMÁTICO ---
-@st.cache_data(ttl=3600)
-def obtener_tasa_usd_uyu():
-    try:
-        url = "https://open.er-api.com/v6/latest/USD"
-        return round(requests.get(url, timeout=5).json()["rates"]["UYU"], 2)
-    except:
-        return 39.00
-
 # --- FUNCIONES DE DATOS Y LOGS ---
-def load_users():
-    if USE_GSHEETS:
-        df = load_sheet_as_df("Usuarios", USERS_COLS)
-        if df.empty:
-            default = pd.DataFrame([{"Usuario": "admin", "Clave": "1234"}])
-            save_df_to_sheet(default, "Usuarios")
-            return default
-        return df.astype(str)
-    if os.path.exists(USERS_FILE): return pd.read_csv(USERS_FILE, dtype={"Usuario": str, "Clave": str})
-    default_users = pd.DataFrame([{"Usuario": "admin", "Clave": "1234"}])
-    default_users.to_csv(USERS_FILE, index=False)
-    return default_users
-
 def load_data():
     if USE_GSHEETS:
         df = load_sheet_as_df("Gastos", GASTOS_COLS)
@@ -576,27 +217,8 @@ usuarios_df = load_users()
 
 # --- PANTALLA DE LOGIN ---
 if not st.session_state.logueado:
-    st.markdown("""
-        <div class="login-hero">
-            <div class="login-logo">🏡</div>
-            <h1 style='font-size:2.6rem; font-weight:900; letter-spacing:-0.05em; margin:0 0 6px 0;
-                background:linear-gradient(135deg,#4F46E5,#7C3AED);
-                -webkit-background-clip:text; -webkit-text-fill-color:transparent;'>La Serena</h1>
-            <p style='font-size:0.9rem; font-weight:600; margin:0 0 4px 0; opacity:0.45; text-transform:uppercase; letter-spacing:1.5px;'>Playa Serena · Proyecto</p>
-            <p style='font-size:0.82rem; font-weight:400; margin:0; opacity:0.35;'>Contabilidad compartida de la construcción</p>
-        </div>
-    """, unsafe_allow_html=True)
-    with st.container():
-        with st.form("login_form"):
-            usuario = st.text_input("Usuario", placeholder="Tu nombre de usuario")
-            clave = st.text_input("Contraseña", type="password", placeholder="••••••••")
-            submit_login = st.form_submit_button("Ingresar →", type="primary", use_container_width=True)
-            if submit_login:
-                if not usuarios_df[(usuarios_df["Usuario"] == usuario) & (usuarios_df["Clave"].astype(str) == str(clave))].empty:
-                    st.session_state.logueado, st.session_state.usuario_actual = True, usuario
-                    st.rerun()
-                else:
-                    st.error("Usuario o contraseña incorrectos.")
+    render_login(usuarios_df, "🏡", "La Serena", "Playa Serena · Proyecto",
+                 "Contabilidad compartida de la construcción", paleta="obra")
 
 # --- APLICACIÓN PRINCIPAL ---
 else:
@@ -609,30 +231,13 @@ else:
 
     # --- CABECERA ---
     total_inv = df_gastos["Monto_UYU"].sum() if not df_gastos.empty else 0
-    col_perfil, col_salir = st.columns([4, 1])
-    with col_perfil:
-        initials = st.session_state.usuario_actual[:2].upper()
-        st.markdown(f"""
-            <div style='padding:12px 0 6px 0; display:flex; align-items:center; gap:12px;'>
-                <div style='width:40px;height:40px;border-radius:12px;background:linear-gradient(135deg,#4F46E5,#7C3AED);
-                    display:inline-flex;align-items:center;justify-content:center;
-                    color:white;font-size:0.85rem;font-weight:800;flex-shrink:0;'>{initials}</div>
-                <div>
-                    <div style='font-size:1.15rem; font-weight:800; letter-spacing:-0.03em; line-height:1.2;'>🏡 La Serena</div>
-                    <div style='font-size:0.72rem; opacity:0.4; font-weight:600; margin-top:1px; text-transform:uppercase; letter-spacing:0.8px;'>Hola, {st.session_state.usuario_actual} &nbsp;·&nbsp; ${total_inv:,.0f} UYU invertidos</div>
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
-    with col_salir:
-        st.markdown("<div style='padding-top:14px;'></div>", unsafe_allow_html=True)
-        if st.button("Salir", use_container_width=True):
-            st.session_state.logueado = False
-            st.session_state.modo_registro = None
-            st.session_state.gasto_a_editar = None
-            st.session_state.transfer_a_editar = None
-            st.rerun()
-
-    st.markdown("<hr class='divider'>", unsafe_allow_html=True)
+    def _logout_obra():
+        st.session_state.modo_registro = None
+        st.session_state.gasto_a_editar = None
+        st.session_state.transfer_a_editar = None
+    _link_copro = ("🏠 Copropiedad", get_secret("url_app_copropiedad")) if has_secret("url_app_copropiedad") else None
+    render_header("🏡", "La Serena · Obra", f"${total_inv:,.0f} UYU invertidos", paleta="obra",
+                  link_otro=_link_copro, on_logout=_logout_obra)
 
     # --- ACCIONES RÁPIDAS ---
     if st.session_state.modo_registro is None and st.session_state.gasto_a_editar is None and st.session_state.transfer_a_editar is None:
@@ -871,16 +476,7 @@ else:
     # VISTA 5: PESTAÑAS PRINCIPALES (VISTA NORMAL DE NAVEGACIÓN)
     # =========================================================
     else:
-        # Restaurar la tab activa después de cerrar un formulario
-        if st.session_state.tab_activa > 0:
-            idx = st.session_state.tab_activa
-            st.session_state.tab_activa = 0
-            st.markdown(f"""<script>
-                window.setTimeout(function() {{
-                    var tabs = window.parent.document.querySelectorAll('button[role="tab"]');
-                    if (tabs[{idx}]) tabs[{idx}].click();
-                }}, 80);
-            </script>""", unsafe_allow_html=True)
+        restaurar_tab()
         opciones_menu = ["📊 Dashboard", "🕰️ Historial", "⚖️ Balance", "🏗️ Obra"]
         if es_admin: opciones_menu.append("⚙️ Admin")
         tabs = st.tabs(opciones_menu)
@@ -1836,14 +1432,15 @@ else:
                 st.markdown("---")
                 with st.expander("🔑 Diagnóstico de Secrets", expanded=False):
                     st.caption("Keys cargadas en st.secrets (sin mostrar valores):")
-                    keys_top = list(st.secrets.keys())
+                    try: keys_top = list(st.secrets.keys())
+                    except Exception: keys_top = ["(sin secrets.toml — modo CSV local)"]
                     st.code("\n".join(keys_top))
-                    drive_ok = "drive_folder_id" in st.secrets
-                    oauth_ok = "google_oauth_refresh_token" in st.secrets
+                    drive_ok = has_secret("drive_folder_id")
+                    oauth_ok = has_secret("google_oauth_refresh_token")
                     st.write(f"- `drive_folder_id` encontrado: {'✅' if drive_ok else '❌'}")
                     st.write(f"- `google_oauth_refresh_token` encontrado: {'✅' if oauth_ok else '❌'}")
                     if drive_ok:
-                        fid = str(st.secrets["drive_folder_id"]).strip()
+                        fid = str(get_secret("drive_folder_id")).strip()
                         st.write(f"- Valor de `drive_folder_id` (primeros 10 chars): `{fid[:10]}...`")
 
                 st.markdown("---")
