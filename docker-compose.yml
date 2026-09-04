@@ -1,18 +1,8 @@
 services:
-  obra:
+  app:
     build: .
-    command: ["streamlit", "run", "App.py", "--server.port=8501", "--server.address=0.0.0.0"]
     ports:
       - "8501:8501"
-    volumes:
-      - .:/app
-    restart: unless-stopped
-
-  copropiedad:
-    build: .
-    command: ["streamlit", "run", "Copropiedad.py", "--server.port=8502", "--server.address=0.0.0.0"]
-    ports:
-      - "8502:8502"
     volumes:
       - .:/app
     restart: unless-stopped

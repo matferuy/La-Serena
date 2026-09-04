@@ -16,18 +16,17 @@ import io
 import plotly.express as px
 import streamlit.components.v1 as components
 from common import (
-    inject_css, USE_GSHEETS, has_secret, get_secret,
+    USE_GSHEETS, has_secret, get_secret,
     load_table, save_table, parse_adjuntos, subir_comprobantes, links_adjuntos_md,
     obtener_tasa_usd_uyu, a_usd, load_users, save_users, socios as _socios,
-    init_session, render_login, render_header, restaurar_tab, kpi, fmt_monto, hoy,
+    init_session, restaurar_tab, kpi, fmt_monto, hoy,
     get_calendar_service,
 )
 
 # =========================================================
 # CONFIGURACIÓN
 # =========================================================
-st.set_page_config(page_title="La Serena · Copropiedad", page_icon="🏠", layout="wide", initial_sidebar_state="collapsed")
-inject_css("copro")
+# Sección "Copropiedad" de La Serena. Se ejecuta como página de App.py (que hace set_page_config, estilos y login).
 
 SH_GASTOS, CSV_GASTOS     = "Copro_Gastos",         "copro_gastos.csv"
 SH_INGRESOS, CSV_INGRESOS = "Copro_Ingresos",       "copro_ingresos.csv"
@@ -304,10 +303,8 @@ def anio_selector(df, col, key):
 init_session({"copro_modo": None, "copro_edit_id": None, "cal_year": hoy().year, "cal_month": hoy().month})
 usuarios_df = load_users()
 
-if not st.session_state.logueado:
-    render_login(usuarios_df, "🏠", "La Serena", "Copropiedad · Hermanos",
-                 "Gastos, uso de la casa, alquileres y cuentas compartidas", paleta="copro")
-    st.stop()
+if not st.session_state.get("logueado"):
+    st.stop()  # el login lo hace App.py
 
 # =========================================================
 # DATOS
@@ -353,11 +350,7 @@ def abrir_form(modo, edit_id=None, tab=0):
 # =========================================================
 # CABECERA
 # =========================================================
-def _logout():
-    st.session_state.copro_modo = None
-    st.session_state.copro_edit_id = None
-_link_obra = ("🏗️ Obra", get_secret("url_app_obra")) if has_secret("url_app_obra") else None
-render_header("🏠", "La Serena · Copropiedad", f"TC U$S {tasa_actual:,.2f}", paleta="copro", link_otro=_link_obra, on_logout=_logout)
+# (La cabecera con el selector de sección y "Salir" la dibuja App.py)
 
 if len(lista_socios) < 2:
     st.info("Se necesitan al menos 2 socios (usuarios no admin) para gestionar la copropiedad. Agregalos en ⚙️ Config.")

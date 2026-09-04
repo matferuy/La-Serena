@@ -1,13 +1,16 @@
 # La Serena
 
-Dos aplicativos Streamlit que comparten login, planilla de Google Sheets y carpeta de Drive:
+Una sola app Streamlit con login compartido y dos secciones independientes, seleccionables desde la cabecera:
 
-| App | Archivo | Para qué |
-|-----|---------|----------|
-| 🏗️ **Obra** | `App.py` | Contabilidad compartida de la construcción: gastos por etapa, presupuesto vs. real, avances, planos, balance entre socios. |
-| 🏠 **Copropiedad** | `Copropiedad.py` | Gestión de la casa entre hermanos: gastos fijos/mantenimiento vs. gastos de uso, calendario de uso (Google Calendar), alquileres y otros ingresos, cuentas bancarias compartidas, balance por moneda. |
+| Sección | Archivo | Para qué |
+|---------|---------|----------|
+| 🏗️ **Obra** | `obra.py` | Contabilidad compartida de la construcción: gastos por etapa, presupuesto vs. real, avances, planos, balance entre socios. |
+| 🏠 **Copropiedad** | `copropiedad.py` | Gestión de la casa entre hermanos: gastos fijos/mantenimiento vs. gastos de uso, calendario de uso (Google Calendar), alquileres y otros ingresos, cuentas bancarias compartidas, balance por moneda. |
 
-`common.py` contiene la infraestructura compartida (estilos, Google Sheets, Drive, Calendar, login, comprobantes múltiples, tipo de cambio).
+- `App.py` es el punto de entrada (`st.navigation`): configura la página, los estilos, hace el login una sola vez y muestra el selector Obra / Copropiedad.
+- `common.py` contiene la infraestructura compartida (estilos, Google Sheets, Drive, Calendar, login, comprobantes múltiples, tipo de cambio).
+
+URLs directas: `/obra` y `/copropiedad`.
 
 ## Cómo funciona la Copropiedad
 
@@ -17,16 +20,11 @@ Dos aplicativos Streamlit que comparten login, planilla de Google Sheets y carpe
 - **Cuentas**: cuentas bancarias compartidas con aportes y retiros por socio, ajustes (intereses/comisiones) y saldo calculado.
 - **Balance**: por moneda (UYU y USD). Para cada hermano: *aporte neto* (lo que pagó + aportes a cuentas − retiros − ingresos que cobró ± pagos entre hermanos) menos *lo que le corresponde* (su % de los gastos compartidos + sus gastos de uso − su % de los ingresos) menos su parte del pozo en cuentas compartidas. Saldo positivo → le deben.
 
+Los datos de Copropiedad viven en la misma planilla de Google Sheets, en pestañas `Copro_Gastos`, `Copro_Ingresos`, `Copro_Usos`, `Copro_Cuentas`, `Copro_Movimientos`, `Copro_Transferencias` y `Copro_Config`, que se crean solas.
+
 ## Deploy en Streamlit Cloud
 
-Crear **dos apps** desde el mismo repositorio, cambiando solo el *Main file path*:
-
-1. `App.py` → Obra
-2. `Copropiedad.py` → Copropiedad
-
-Ambas usan los mismos Secrets (ver `.streamlit/secrets.toml.example`). La app de Copropiedad crea automáticamente en la misma planilla las pestañas `Copro_Gastos`, `Copro_Ingresos`, `Copro_Usos`, `Copro_Cuentas`, `Copro_Movimientos`, `Copro_Transferencias` y `Copro_Config`.
-
-Opcional: `url_app_obra` y `url_app_copropiedad` en los Secrets agregan un link cruzado en la cabecera de cada app.
+Una sola app con *Main file path* = `App.py`. Secrets según `.streamlit/secrets.toml.example`.
 
 ## Google Drive y Calendar (OAuth)
 
@@ -43,10 +41,7 @@ Sin Python: [OAuth Playground](https://developers.google.com/oauthplayground) co
 
 ```bash
 pip install -r requirements.txt
-streamlit run App.py            # Obra en :8501
-streamlit run Copropiedad.py    # Copropiedad
+streamlit run App.py
 ```
 
-Sin `secrets.toml` las apps funcionan con archivos CSV locales (sin Drive ni Calendar).
-
-Con Docker: `docker compose up` levanta Obra en `:8501` y Copropiedad en `:8502`.
+Sin `secrets.toml` la app funciona con archivos CSV locales (sin Drive ni Calendar). Con Docker: `docker compose up`.
