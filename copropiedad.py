@@ -16,7 +16,6 @@ import io
 import base64
 import urllib.parse
 import plotly.express as px
-import streamlit.components.v1 as components
 from common import (
     USE_GSHEETS, has_secret, get_secret,
     load_table, save_table, parse_adjuntos, subir_comprobantes, links_adjuntos_md,
@@ -264,7 +263,8 @@ def etiqueta_uso(u):
     tit = str(u.get("Titulo", "")).strip()
     return f"{t}" + (f": {tit}" if tit and t == "Alquiler" else "")
 
-def render_mes(year, month, df_usos, lista_socios):
+def render_mes(year, month, df_usos, lista_socios, extras=None):
+    """Grilla mensual. `extras` = lista de (fecha_ini, fecha_fin, color, etiqueta) adicionales (ej: eventos de Google Calendar)."""
     cal = calendar.Calendar(firstweekday=0)
     weeks = cal.monthdatescalendar(year, month)
     html = '<div class="cal-grid">' + "".join(f'<div class="cal-head">{d}</div>' for d in ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"])
@@ -273,6 +273,7 @@ def render_mes(year, month, df_usos, lista_socios):
         for _, u in df_usos.iterrows():
             if pd.isna(u["Fecha_Inicio"]) or pd.isna(u["Fecha_Fin"]): continue
             usos.append((u["Fecha_Inicio"].date(), u["Fecha_Fin"].date(), color_uso(u, lista_socios), etiqueta_uso(u)))
+    usos += list(extras or [])
     for week in weeks:
         for d in week:
             if d.month != month:
@@ -341,6 +342,29 @@ def gcal_actualizar_evento(cal_id, event_id, titulo, ini, fin, descripcion=""):
 def gcal_borrar_evento(cal_id, event_id):
     svc = get_calendar_service()
     svc.events().delete(calendarId=cal_id, eventId=event_id).execute()
+
+@st.cache_data(ttl=300, show_spinner=False)
+def gcal_listar_eventos(cal_id, desde_iso, hasta_iso):
+    """Eventos del calendario de Google entre dos fechas (ISO). Devuelve lista de dicts {id, titulo, ini, fin}."""
+    svc = get_calendar_service()
+    res = svc.events().list(calendarId=cal_id, timeMin=f"{desde_iso}T00:00:00Z", timeMax=f"{hasta_iso}T23:59:59Z",
+                            singleEvents=True, orderBy="startTime", maxResults=250).execute()
+    out = []
+    for ev in res.get("items", []):
+        s, e = ev.get("start", {}), ev.get("end", {})
+        ini = s.get("date") or str(s.get("dateTime", ""))[:10]
+        fin = e.get("date") or str(e.get("dateTime", ""))[:10]
+        if not ini or not fin:
+            continue
+        if s.get("date"):  # evento de día completo: el fin es exclusivo
+            fin = (datetime.date.fromisoformat(fin) - datetime.timedelta(days=1)).isoformat()
+        if fin < ini:
+            fin = ini
+        out.append({"id": ev.get("id", ""), "titulo": ev.get("summary", "(sin título)"), "ini": ini, "fin": fin})
+    return out
+
+def link_google_calendar(cal_id):
+    return "https://calendar.google.com/calendar/r?cid=" + urllib.parse.quote(cal_id, safe="")
 
 def titulo_evento(tipo, usuario, titulo):
     if tipo == "Uso propio": return f"🏠 {usuario} en La Serena"
@@ -925,14 +949,36 @@ else:
             st.rerun()
         meses_es = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
         cmes.markdown(f"<div style='text-align:center;font-weight:900;font-size:1.25rem;padding-top:8px;'>{meses_es[st.session_state.cal_month-1]} {st.session_state.cal_year}</div>", unsafe_allow_html=True)
-        render_mes(st.session_state.cal_year, st.session_state.cal_month, df_usos, lista_socios)
+        # Eventos del calendario de Google que no fueron creados desde la app (se muestran en gris)
+        extras_gcal, eventos_gcal, error_gcal = [], [], ""
+        if gcal_disponible(cfg):
+            _y, _m = st.session_state.cal_year, st.session_state.cal_month
+            _ini = datetime.date(_y, _m, 1)
+            _fin = (_ini + datetime.timedelta(days=32)).replace(day=1) - datetime.timedelta(days=1)
+            try:
+                ids_app = set(df_usos["GCal_Event_ID"].astype(str).tolist()) if not df_usos.empty else set()
+                eventos_gcal = [e for e in gcal_listar_eventos(calendar_id(cfg), _ini.isoformat(), _fin.isoformat()) if e["id"] not in ids_app]
+                extras_gcal = [(datetime.date.fromisoformat(e["ini"]), datetime.date.fromisoformat(e["fin"]), "#64748B", f"📆 {e['titulo']}") for e in eventos_gcal]
+            except Exception as e:
+                error_gcal = gcal_error_msg(e)
+        render_mes(st.session_state.cal_year, st.session_state.cal_month, df_usos, lista_socios, extras=extras_gcal)
         leyenda = " ".join(f"<span class='cal-tag' style='display:inline-block;background:{COLORES_SOCIO[i % len(COLORES_SOCIO)]};margin-right:6px;'>{s}</span>" for i, s in enumerate(lista_socios))
-        leyenda += "<span class='cal-tag' style='display:inline-block;background:#D97706;margin-right:6px;'>Alquiler</span><span class='cal-tag' style='display:inline-block;background:#475569;margin-right:6px;'>Mantenimiento</span><span class='cal-tag' style='display:inline-block;background:#E11D48;'>Bloqueo</span>"
+        leyenda += "<span class='cal-tag' style='display:inline-block;background:#D97706;margin-right:6px;'>Alquiler</span><span class='cal-tag' style='display:inline-block;background:#475569;margin-right:6px;'>Mantenimiento</span><span class='cal-tag' style='display:inline-block;background:#E11D48;margin-right:6px;'>Bloqueo</span>"
+        if gcal_disponible(cfg):
+            leyenda += "<span class='cal-tag' style='display:inline-block;background:#64748B;'>📆 Google Calendar</span>"
         st.markdown(f"<div style='margin:10px 0 4px 0;'>{leyenda}</div>", unsafe_allow_html=True)
 
         if calendar_id(cfg):
-            with st.expander("📆 Ver Google Calendar"):
-                components.iframe(f"https://calendar.google.com/calendar/embed?src={calendar_id(cfg)}&ctz=America%2FMontevideo&mode=MONTH", height=520)
+            cg1, cg2 = st.columns([3, 1])
+            cg1.link_button("📆 Abrir en Google Calendar", link_google_calendar(calendar_id(cfg)), use_container_width=True)
+            if cg2.button("🔄", help="Volver a leer los eventos de Google Calendar", use_container_width=True, key="gcal_refresh"):
+                gcal_listar_eventos.clear()
+                st.rerun()
+            if error_gcal:
+                st.caption(f"⚠️ Google Calendar: {error_gcal}")
+            elif eventos_gcal:
+                st.caption("Eventos en Google Calendar que no están registrados como estadías en la app: " +
+                           " · ".join(f"{e['titulo']} ({pd.to_datetime(e['ini']).strftime('%d/%m')}→{pd.to_datetime(e['fin']).strftime('%d/%m')})" for e in eventos_gcal[:10]))
 
         st.markdown('<div class="section-title">Estadías</div>', unsafe_allow_html=True)
         if df_usos.empty:
