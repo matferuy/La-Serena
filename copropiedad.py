@@ -516,6 +516,8 @@ if modo == "gasto":
             default_mod = atr_actual
         elif atr_actual in lista_socios:
             default_mod = ATRIB_PORCENTAJE          # registro viejo atribuido a un solo hermano
+        elif editando:
+            default_mod = ATRIB_IGUALES             # registro viejo "Ambos" / "Alquiler" / vacío
         else:
             default_mod = ATRIB_PRORRATEO if tipo == TIPO_USO else ATRIB_IGUALES
         atribuido = st.radio("Modalidad de reparto", MODALIDADES, index=MODALIDADES.index(default_mod), horizontal=True, key="g_modalidad",
