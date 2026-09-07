@@ -13,6 +13,8 @@ import datetime
 import calendar
 import uuid
 import io
+import base64
+import urllib.parse
 import plotly.express as px
 import streamlit.components.v1 as components
 from common import (
@@ -291,9 +293,35 @@ def solapamientos(df_usos, ini, fin, excluir_id=None):
     return d[(d["Fecha_Inicio"].dt.date <= fin) & (d["Fecha_Fin"].dt.date >= ini)]
 
 # --- Google Calendar ---
+def normalizar_calendar_id(valor):
+    """Acepta el ID del calendario, el link para compartir (?cid=BASE64) o la URL de embed (?src=...)."""
+    v = str(valor or "").strip()
+    if not v:
+        return ""
+    if v.startswith("http"):
+        try:
+            qs = urllib.parse.parse_qs(urllib.parse.urlparse(v).query)
+            if "cid" in qs:
+                b = qs["cid"][0]
+                return base64.urlsafe_b64decode(b + "=" * (-len(b) % 4)).decode("utf-8").strip()
+            if "src" in qs:
+                return urllib.parse.unquote(qs["src"][0]).strip()
+        except Exception:
+            return v
+    return urllib.parse.unquote(v)
+
 def calendar_id(cfg):
-    if has_secret("google_calendar_id"): return str(get_secret("google_calendar_id")).strip()
-    return str(cfg.get("google_calendar_id", "")).strip()
+    if has_secret("google_calendar_id"): return normalizar_calendar_id(get_secret("google_calendar_id"))
+    return normalizar_calendar_id(cfg.get("google_calendar_id", ""))
+
+def gcal_error_msg(e):
+    s = str(e)
+    if "insufficient" in s.lower() or "insufficientPermissions" in s:
+        return ("El token OAuth no tiene permiso de Google Calendar. Regenerá el token agregando el scope "
+                "https://www.googleapis.com/auth/calendar (get_drive_token.py u OAuth Playground) y actualizá los Secrets.")
+    if "notFound" in s or "404" in s:
+        return "No se encontró el calendario. Verificá el Calendar ID en ⚙️ Config y que la cuenta del token tenga acceso a ese calendario."
+    return s
 
 def gcal_disponible(cfg):
     return bool(calendar_id(cfg)) and has_secret("google_oauth_refresh_token")
@@ -624,7 +652,7 @@ elif modo == "uso":
                     if ev_id: gcal_actualizar_evento(calendar_id(cfg), ev_id, tit_ev, f_ini, f_fin, desc_ev)
                     else: ev_id = gcal_crear_evento(calendar_id(cfg), tit_ev, f_ini, f_fin, desc_ev)
                 except Exception as e:
-                    st.warning(f"No se pudo sincronizar con Google Calendar: {e}")
+                    st.warning(f"No se pudo sincronizar con Google Calendar: {gcal_error_msg(e)}")
             registro = {"ID": fila["ID"] if editando else nuevo_id(), "Fecha_Inicio": pd.Timestamp(f_ini), "Fecha_Fin": pd.Timestamp(f_fin),
                         "Tipo": tipo_u, "Usuario": usuario_u, "Titulo": titulo, "Personas": int(personas), "Notas": notas,
                         "GCal_Event_ID": ev_id, "Registrado_por": fila["Registrado_por"] if editando else usuario}
@@ -636,7 +664,7 @@ elif modo == "uso":
             ev_id = str(fila["GCal_Event_ID"])
             if ev_id.strip() not in ("", "nan") and gcal_disponible(cfg):
                 try: gcal_borrar_evento(calendar_id(cfg), ev_id)
-                except Exception as e: st.warning(f"No se pudo borrar el evento de Google Calendar: {e}")
+                except Exception as e: st.warning(f"No se pudo borrar el evento de Google Calendar: {gcal_error_msg(e)}")
             guardar_usos(df_usos[df_usos["ID"] != edit_id])
             cerrar_form()
         if c_cancel.button("Cancelar", use_container_width=True):
@@ -1079,9 +1107,12 @@ else:
             st.info(f"Configurado en secrets: `{calendar_id(cfg)}`")
         else:
             with st.form("form_gcal"):
-                cal_in = st.text_input("Calendar ID", cfg.get("google_calendar_id", ""), placeholder="xxxx@group.calendar.google.com")
+                cal_in = st.text_input("Calendar ID o link del calendario", cfg.get("google_calendar_id", ""), placeholder="xxxx@group.calendar.google.com",
+                                       help="Podés pegar el ID (termina en @group.calendar.google.com) o el link para compartir; la app lo convierte.")
+                if cfg.get("google_calendar_id"):
+                    st.caption(f"ID en uso: `{calendar_id(cfg)}`")
                 if st.form_submit_button("Guardar calendario", use_container_width=True):
-                    cfg["google_calendar_id"] = cal_in.strip()
+                    cfg["google_calendar_id"] = normalizar_calendar_id(cal_in)
                     save_config(cfg)
                     st.success("Guardado.")
                     st.rerun()
