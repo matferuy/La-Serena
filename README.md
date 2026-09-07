@@ -14,7 +14,12 @@ URLs directas: `/obra` y `/copropiedad`.
 
 ## Cómo funciona la Copropiedad
 
-- **Gastos**: cada gasto es *Fijo / Mantenimiento* (se reparte según la participación configurada, 50/50 por defecto) o *de Uso* (se atribuye al hermano que usó la casa, a ambos, o al alquiler). Puede pagarlo un hermano o una cuenta compartida.
+- **Gastos**: cada gasto es *Fijo / Mantenimiento* o *de Uso*, y se reparte entre los hermanos con una de tres modalidades:
+  - *Partes iguales* (según la participación configurada, 50/50 por defecto): gastos fijos recurrentes.
+  - *Porcentaje ad hoc*: gastos excepcionales, con un porcentaje definido para ese gasto (puede ser 100% de uno).
+  - *Proporcional al uso*: gastos recurrentes asociados al uso (UTE, OSE, gas), repartidos por días de estadía de cada uno en un período; los días de alquiler cuentan como compartidos.
+
+  Puede pagarlo un hermano o una cuenta compartida.
 - **Uso de la casa**: estadías propias, alquileres, mantenimiento o bloqueos en un calendario mensual. Si se configura `google_calendar_id` (y el token OAuth tiene permiso de Calendar) cada estadía crea/actualiza/borra un evento en Google Calendar. Avisa si dos estadías se superponen.
 - **Ingresos**: alquileres u otros, cobrados por un hermano o depositados en una cuenta compartida. Se pueden vincular a la estadía.
 - **Cuentas**: cuentas bancarias compartidas con aportes y retiros por socio, ajustes (intereses/comisiones) y saldo calculado.
