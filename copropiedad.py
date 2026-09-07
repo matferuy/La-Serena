@@ -36,7 +36,7 @@ SH_MOVS, CSV_MOVS         = "Copro_Movimientos",    "copro_movimientos.csv"
 SH_TRANSF, CSV_TRANSF     = "Copro_Transferencias", "copro_transferencias.csv"
 SH_CONFIG, CSV_CONFIG     = "Copro_Config",         "copro_config.csv"
 
-GASTOS_COLS   = ["ID", "Fecha", "Concepto", "Tipo", "Categoria", "Moneda", "Monto_Original", "Tasa_Cambio", "Monto_UYU", "Pagado_por", "Atribuido_a", "Uso_ID", "Archivo_Adjunto", "Notas", "Registrado_por"]
+GASTOS_COLS   = ["ID", "Fecha", "Concepto", "Tipo", "Categoria", "Moneda", "Monto_Original", "Tasa_Cambio", "Monto_UYU", "Pagado_por", "Atribuido_a", "Periodo_Desde", "Periodo_Hasta", "Reparto", "Uso_ID", "Archivo_Adjunto", "Notas", "Registrado_por"]
 INGRESOS_COLS = ["ID", "Fecha", "Concepto", "Tipo", "Moneda", "Monto_Original", "Tasa_Cambio", "Monto_UYU", "Cobrado_por", "Uso_ID", "Archivo_Adjunto", "Notas", "Registrado_por"]
 USOS_COLS     = ["ID", "Fecha_Inicio", "Fecha_Fin", "Tipo", "Usuario", "Titulo", "Personas", "Notas", "GCal_Event_ID", "Registrado_por"]
 CUENTAS_COLS  = ["ID", "Nombre", "Banco", "Moneda", "Saldo_Inicial", "Fecha_Apertura", "Notas", "Activa"]
@@ -52,7 +52,7 @@ CATS_USO  = ["UTE (consumo)", "OSE (consumo)", "Gas / Leña", "Limpieza", "Consu
 TIPOS_USO_CASA = ["Uso propio", "Alquiler", "Mantenimiento", "Bloqueo"]
 TIPOS_INGRESO  = ["Alquiler", "Otro"]
 TIPOS_MOV      = ["Aporte", "Retiro", "Ajuste"]
-ATRIB_AMBOS, ATRIB_ALQ = "Ambos", "Alquiler"
+ATRIB_AMBOS, ATRIB_ALQ, ATRIB_PRORRATEO = "Ambos", "Alquiler", "Prorrateo por uso"
 COLORES_SOCIO = ["#0D9488", "#0EA5E9", "#8B5CF6"]
 PALETA_CATS = ["#0D9488", "#0EA5E9", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899", "#84CC16", "#F97316", "#14B8A6", "#6366F1", "#A16207"]
 
@@ -155,6 +155,15 @@ def calc_balance(moneda, lista_socios, shares, df_gastos, df_ingresos, df_movs, 
     tr = df_transf[df_transf["Moneda"].astype(str).str.upper() == M] if not df_transf.empty else pd.DataFrame(columns=TRANSF_COLS)
 
     gastos_compartidos = g[g["Atribuido_a"].isin([ATRIB_AMBOS, ATRIB_ALQ, "", "nan"])]["Monto_Original"].sum()
+    # Prorrateo por uso: cada gasto se reparte según su columna Reparto; si no es válida, va como compartido
+    prorrateado = {s: 0.0 for s in lista_socios}
+    for _, r in g[g["Atribuido_a"] == ATRIB_PRORRATEO].iterrows():
+        rep = parse_reparto(r.get("Reparto", ""))
+        if rep:
+            for s in lista_socios:
+                prorrateado[s] += float(r["Monto_Original"]) * rep.get(s, 0)
+        else:
+            gastos_compartidos += float(r["Monto_Original"])
     ingresos_total = ing["Monto_Original"].sum()
     # Pool compartido: lo que entró/salió de las cuentas por aportes, retiros, ingresos y gastos
     pool = 0.0
@@ -177,13 +186,63 @@ def calc_balance(moneda, lista_socios, shares, df_gastos, df_ingresos, df_movs, 
         env = tr[tr["Origen"] == s]["Monto_Original"].sum()
         rec = tr[tr["Destino"] == s]["Monto_Original"].sum()
         aporte_neto = pagado_fijo + pagado_uso + aportes - retiros - cobrado + env - rec
-        uso_propio = g[g["Atribuido_a"] == s]["Monto_Original"].sum()
+        uso_propio = g[g["Atribuido_a"] == s]["Monto_Original"].sum() + prorrateado.get(s, 0.0)
         corresponde = sh * gastos_compartidos + uso_propio - sh * ingresos_total
         saldo = aporte_neto - corresponde - sh * pool
         res[s] = dict(pagado_fijo=pagado_fijo, pagado_uso=pagado_uso, aportes=aportes, retiros=retiros,
                       cobrado=cobrado, env=env, rec=rec, aporte_neto=aporte_neto, uso_propio=uso_propio,
                       corresponde=corresponde, pool_share=sh * pool, saldo=saldo, share=sh)
     return res
+
+# --- Prorrateo de gastos de uso por días de estadía ---
+def dias_uso_periodo(df_usos, desde, hasta, lista_socios):
+    """Días de 'Uso propio' por socio y días de alquiler dentro del período [desde, hasta]."""
+    dias = {s: 0 for s in lista_socios}
+    dias_alq = 0
+    if df_usos is None or df_usos.empty:
+        return dias, dias_alq
+    for _, u in df_usos.dropna(subset=["Fecha_Inicio", "Fecha_Fin"]).iterrows():
+        ini = max(u["Fecha_Inicio"].date(), desde)
+        fin = min(u["Fecha_Fin"].date(), hasta)
+        if fin < ini:
+            continue
+        n = (fin - ini).days + 1
+        if u["Tipo"] == "Uso propio" and str(u["Usuario"]) in dias:
+            dias[str(u["Usuario"])] += n
+        elif u["Tipo"] == "Alquiler":
+            dias_alq += n
+    return dias, dias_alq
+
+def reparto_por_uso(dias, dias_alq, shares):
+    """Fracción por socio: días propios / total, con los días de alquiler repartidos según participación."""
+    total = sum(dias.values()) + dias_alq
+    if total <= 0:
+        return {s: shares.get(s, 0) for s in dias}
+    return {s: (dias[s] + dias_alq * shares.get(s, 0)) / total for s in dias}
+
+def reparto_str(rep):
+    return ";".join(f"{s}:{v*100:.2f}" for s, v in rep.items())
+
+def parse_reparto(txt):
+    """'Teo:33.33;Tin:66.67' → {'Teo': 0.3333, 'Tin': 0.6667}. Dict vacío si no es válido."""
+    out = {}
+    for parte in str(txt or "").split(";"):
+        if ":" in parte:
+            s, v = parte.rsplit(":", 1)
+            try: out[s.strip()] = float(v) / 100.0
+            except ValueError: pass
+    return out if abs(sum(out.values()) - 1) < 0.01 else {}
+
+def describir_reparto(fila):
+    rep = parse_reparto(fila.get("Reparto", ""))
+    if not rep:
+        return ATRIB_PRORRATEO
+    per = ""
+    d, h = str(fila.get("Periodo_Desde", "")), str(fila.get("Periodo_Hasta", ""))
+    if d not in ("", "nan") and h not in ("", "nan"):
+        try: per = f" ({pd.to_datetime(d).strftime('%d/%m')}–{pd.to_datetime(h).strftime('%d/%m/%y')})"
+        except Exception: per = ""
+    return f"{ATRIB_PRORRATEO}{per}: " + " · ".join(f"{s} {v*100:.0f}%" for s, v in rep.items())
 
 def noches(ini, fin):
     try: return max((fin - ini).days, 0) + 1
@@ -380,14 +439,53 @@ if modo == "gasto":
         pagado_por = st.selectbox("¿Quién pagó?", labels_p, index=values_p.index(actual_p) if actual_p in values_p else 0) if labels_p else ""
         pagado_por = values_p[labels_p.index(pagado_por)] if labels_p else ""
         if tipo == TIPO_USO:
-            opc_atr = lista_socios + [ATRIB_AMBOS, ATRIB_ALQ]
-            help_atr = "A quién se le atribuye el gasto: al hermano que usó la casa, a ambos, o al alquiler (compartido)."
+            opc_atr = lista_socios + [ATRIB_AMBOS, ATRIB_ALQ, ATRIB_PRORRATEO]
+            help_atr = ("A quién se le atribuye el gasto: al hermano que usó la casa, a ambos, al alquiler (compartido), "
+                        "o prorrateado según los días de uso de cada uno en un período (ej: factura de UTE del mes).")
             default_atr = fila["Atribuido_a"] if editando and fila["Atribuido_a"] in opc_atr else (usuario if usuario in opc_atr else ATRIB_AMBOS)
         else:
             opc_atr = [ATRIB_AMBOS] + lista_socios
             help_atr = "Los gastos fijos normalmente son de ambos (según participación)."
             default_atr = fila["Atribuido_a"] if editando and fila["Atribuido_a"] in opc_atr else ATRIB_AMBOS
         atribuido = st.selectbox("Atribuido a", opc_atr, index=opc_atr.index(default_atr), help=help_atr)
+
+        periodo_desde, periodo_hasta, reparto_txt = "", "", ""
+        if atribuido == ATRIB_PRORRATEO:
+            st.markdown("<div style='font-weight:800;margin:6px 0 2px 0;'>Período de uso a prorratear</div>", unsafe_allow_html=True)
+            def _fecha_o(val, default):
+                try: return pd.to_datetime(val).date() if str(val).strip() not in ("", "nan") else default
+                except Exception: return default
+            primer_dia = fecha.replace(day=1)
+            ultimo_dia = (primer_dia + datetime.timedelta(days=32)).replace(day=1) - datetime.timedelta(days=1)
+            cp1, cp2 = st.columns(2)
+            p_desde = cp1.date_input("Desde", _fecha_o(fila["Periodo_Desde"], primer_dia) if editando else primer_dia, key="g_p_desde")
+            p_hasta = cp2.date_input("Hasta", _fecha_o(fila["Periodo_Hasta"], ultimo_dia) if editando else ultimo_dia, key="g_p_hasta")
+            if p_hasta < p_desde:
+                st.error("El fin del período debe ser posterior al inicio.")
+            dias, dias_alq = dias_uso_periodo(df_usos, p_desde, p_hasta, lista_socios)
+            rep_auto = reparto_por_uso(dias, dias_alq, shares)
+            total_dias = sum(dias.values()) + dias_alq
+            if total_dias == 0:
+                st.warning("No hay estadías registradas en ese período: se reparte según participación.")
+            else:
+                detalle = " · ".join(f"{s}: {dias[s]} días" for s in lista_socios) + (f" · Alquiler: {dias_alq} días (compartidos)" if dias_alq else "")
+                st.caption(f"Días de uso en el período → {detalle}")
+            manual = st.checkbox("Ajustar porcentajes manualmente", value=bool(editando and parse_reparto(fila["Reparto"]) and parse_reparto(fila["Reparto"]) != rep_auto and total_dias == 0), key="g_rep_manual")
+            if manual:
+                rep_prev = parse_reparto(fila["Reparto"]) if editando else {}
+                cols_r = st.columns(len(lista_socios))
+                rep = {}
+                for i, s in enumerate(lista_socios):
+                    rep[s] = cols_r[i].number_input(f"{s} (%)", min_value=0.0, max_value=100.0,
+                                                    value=round((rep_prev.get(s, rep_auto.get(s, 0))) * 100, 2), step=1.0, key=f"g_rep_{s}") / 100.0
+                if abs(sum(rep.values()) - 1) > 0.001:
+                    st.error("Los porcentajes deben sumar 100.")
+            else:
+                rep = rep_auto
+            st.markdown("<div style='font-size:0.95rem;margin:4px 0 8px 0;'>Reparto: " +
+                        " &nbsp;·&nbsp; ".join(f"<b>{s}</b> {v*100:.1f}%" + (f" ({fmt_monto(moneda, (monto or 0) * v)})" if monto else "") for s, v in rep.items()) +
+                        "</div>", unsafe_allow_html=True)
+            periodo_desde, periodo_hasta, reparto_txt = str(p_desde), str(p_hasta), reparto_str(rep)
         uso_id = ""
         if tipo == TIPO_USO and not df_usos.empty:
             recientes = df_usos.dropna(subset=["Fecha_Inicio"]).sort_values("Fecha_Inicio", ascending=False).head(30)
@@ -406,6 +504,8 @@ if modo == "gasto":
         if c_save.button("Guardar", type="primary", use_container_width=True):
             if not monto or not concepto or not str(categoria).strip():
                 st.error("Falta monto, concepto o categoría.")
+            elif atribuido == ATRIB_PRORRATEO and (not parse_reparto(reparto_txt) or periodo_hasta < periodo_desde):
+                st.error("Revisá el período y los porcentajes del prorrateo (deben sumar 100).")
             else:
                 adj_actual = parse_adjuntos(fila["Archivo_Adjunto"]) if editando else []
                 if archivos:
@@ -414,7 +514,8 @@ if modo == "gasto":
                     adj_actual += parse_adjuntos(urls)
                 registro = {"ID": fila["ID"] if editando else nuevo_id(), "Fecha": pd.Timestamp(fecha), "Concepto": concepto, "Tipo": tipo,
                             "Categoria": str(categoria).strip(), "Moneda": moneda, "Monto_Original": monto, "Tasa_Cambio": tasa,
-                            "Monto_UYU": monto * tasa, "Pagado_por": pagado_por, "Atribuido_a": atribuido, "Uso_ID": uso_id,
+                            "Monto_UYU": monto * tasa, "Pagado_por": pagado_por, "Atribuido_a": atribuido,
+                            "Periodo_Desde": periodo_desde, "Periodo_Hasta": periodo_hasta, "Reparto": reparto_txt, "Uso_ID": uso_id,
                             "Archivo_Adjunto": " ||| ".join(adj_actual) if adj_actual else "Sin adjunto", "Notas": notas,
                             "Registrado_por": fila["Registrado_por"] if editando else usuario}
                 if editando:
@@ -770,7 +871,7 @@ else:
                         f"<div style='display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:8px;'>"
                         f"<span class='badge {badge}'>{f['Tipo']}</span><span class='badge badge-otros'>{f['Categoria']}</span>"
                         f"<span style='font-size:0.85rem;opacity:0.6;'>👤 Pagó {nombre_pagador(f['Pagado_por'], df_cuentas)}</span>"
-                        f"<span style='font-size:0.85rem;opacity:0.6;'>🎯 Atribuido a {f['Atribuido_a'] or ATRIB_AMBOS}</span>"
+                        f"<span style='font-size:0.85rem;opacity:0.6;'>🎯 {describir_reparto(f) if f['Atribuido_a'] == ATRIB_PRORRATEO else 'Atribuido a ' + (f['Atribuido_a'] or ATRIB_AMBOS)}</span>"
                         f"</div>", unsafe_allow_html=True)
                     ca, cb = st.columns(2)
                     ca.metric("Monto", fmt_monto(f["Moneda"], f["Monto_Original"]))
