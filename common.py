@@ -12,6 +12,7 @@ import os
 import io
 import datetime
 import textwrap
+import time
 import requests
 import gspread
 from google.oauth2.service_account import Credentials
@@ -297,25 +298,63 @@ def get_gspread_client():
 def get_spreadsheet():
     return get_gspread_client().open_by_key(st.secrets["spreadsheet_id"])
 
+def _con_reintentos(fn, intentos=5):
+    """Ejecuta fn() reintentando con espera creciente si Google devuelve 429 (cuota) o 5xx."""
+    espera = 1.5
+    for i in range(intentos):
+        try:
+            return fn()
+        except gspread.exceptions.APIError as e:
+            code = getattr(getattr(e, "response", None), "status_code", None)
+            if code not in (429, 500, 502, 503) or i == intentos - 1:
+                raise
+            time.sleep(espera)
+            espera *= 2
+
+@st.cache_resource
+def _worksheets_cache():
+    """Dict título → Worksheet, cargado con UNA sola llamada a la API (en vez de una por hoja)."""
+    return {ws.title: ws for ws in _con_reintentos(lambda: get_spreadsheet().worksheets())}
+
 def _get_or_create_ws(sheet_name, columns):
+    cache = _worksheets_cache()
+    if sheet_name in cache:
+        return cache[sheet_name]
     spreadsheet = get_spreadsheet()
     try:
-        return spreadsheet.worksheet(sheet_name)
+        ws = _con_reintentos(lambda: spreadsheet.worksheet(sheet_name))
     except gspread.WorksheetNotFound:
-        ws = spreadsheet.add_worksheet(sheet_name, rows=1000, cols=max(len(columns), 1))
-        ws.update(values=[columns], range_name='A1')
-        return ws
+        ws = _con_reintentos(lambda: spreadsheet.add_worksheet(sheet_name, rows=1000, cols=max(len(columns), 1)))
+        _con_reintentos(lambda: ws.update(values=[columns], range_name='A1'))
+    cache[sheet_name] = ws
+    return ws
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=300, show_spinner="Cargando datos…")
 def load_sheet_as_df(sheet_name, _columns):
     ws = _get_or_create_ws(sheet_name, _columns)
-    records = ws.get_all_records()
-    return pd.DataFrame(records) if records else pd.DataFrame(columns=_columns)
+    valores = _con_reintentos(lambda: ws.get_all_values())   # 1 sola llamada (get_all_records hace 2)
+    if not valores or not any(str(c).strip() for c in valores[0]):
+        return pd.DataFrame(columns=_columns)
+    header = [str(c).strip() for c in valores[0]]
+    filas = [r + [""] * (len(header) - len(r)) for r in valores[1:] if any(str(c).strip() for c in r)]
+    df = pd.DataFrame(filas, columns=header) if filas else pd.DataFrame(columns=header)
+    # Mismo comportamiento que get_all_records: cada celda numérica como número, el resto como texto
+    def _num(v):
+        s = str(v).strip()
+        if not s: return ""
+        try:
+            f = float(s)
+            return int(f) if f.is_integer() and "." not in s and "e" not in s.lower() else f
+        except ValueError:
+            return s
+    for c in df.columns:
+        df[c] = df[c].map(_num)
+    return df
 
 def save_df_to_sheet(df, sheet_name):
     ws = _get_or_create_ws(sheet_name, df.columns.tolist())
-    ws.clear()
-    ws.update(values=[df.columns.tolist()] + df.astype(str).values.tolist(), range_name='A1')
+    _con_reintentos(lambda: ws.clear())
+    _con_reintentos(lambda: ws.update(values=[df.columns.tolist()] + df.astype(str).values.tolist(), range_name='A1'))
 
 def load_table(sheet_name, csv_file, columns):
     """Carga una tabla desde Google Sheets o CSV local, garantizando las columnas."""
